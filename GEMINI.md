@@ -40,9 +40,9 @@ No task shall be marked **Completed** in `task-master` or this file until:
 - **Verification Method**: Automated unit tests (3/3 passed).
 - **Status**: Verified
 
-### 3 - 2026-03-22
-- **Work Done**: Implemented `PieceDetector` (YOLOv8) and `FusionManager` (dual-camera merger); integrated into AVS core loop.
-- **Verification Method**: Automated unit tests for fusion logic (3/3 passed); modular logic review.
+### 9 - 2026-03-22
+- **Work Done**: Scaffolded Vite/React frontend; implemented `ChessBoardView`, `ControlPanel`, and `VisionPreview` components with TailwindCSS styling. Established a modern "Control Center" dashboard layout.
+- **Verification Method**: Manual confirmation of file structure and component logic (mock-ready).
 - **Status**: Verified
 - **BLOCKERS**: None
 
@@ -56,8 +56,9 @@ No task shall be marked **Completed** in `task-master` or this file until:
 | 2 | AVS - Camera & Calibration | **Completed** | 2026-03-22 |
 | 3 | AVS - YOLO & Piece Detection | **Completed** | 2026-03-22 |
 | 4 | GLAS - Core Game Logic & API | Pending | 2026-03-22 |
-| 5 | Inter-Service Communication (RabbitMQ) | Pending | 2026-03-22 |
-| 7 | GLAS - AI Execution Lock | Pending | 2026-03-22 |
+| 9 | Frontend - Web UI Skeleton | **Completed** | 2026-03-22 |
+| 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
+
 | 9 | Frontend - Web UI Skeleton | **In-Progress** | 2026-03-22 |
 | 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
 

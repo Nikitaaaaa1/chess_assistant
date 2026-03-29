@@ -1,16 +1,16 @@
 # Task: Frontend - Web UI & Virtual Board Skeletons
-- **Status**: In-Progress
+- **Status**: Completed
 - **Date**: 2026-03-22
 ---
 ## Description of Work Done
-- Scaffolding the React frontend using Vite/TypeScript.
-- Integrating `react-chessboard` for the virtual game state visualization.
-- Designing the layout for dual camera previews and the game control panel.
+- Scaffolded the React frontend using Vite/TypeScript and TailwindCSS.
+- Implemented `ChessBoardView` using `react-chessboard` and `chess.js` for local move validation.
+- Created `ControlPanel` with modern UI for game session management (New Game, Undo, Difficulty).
+- Developed `VisionPreview` component with dual-camera stream placeholders.
+- Assembled everything into a responsive, dark-themed dashboard in `App.tsx`.
 
 ## Blockers
-- No active Backend API (GLAS) or WebSocket stream yet; using mock data for initial UI dev.
+- None (currently using simulation/mock mode).
 ---
 ## Next Steps
-- Create the core layout component with TailwindCSS.
-- Implement the `ChessBoard` component with basic FEN string support.
-- Build the `ControlPanel` for session management (Start, Undo, Difficulty).
+- **Task 10**: Connect UI to WebSockets for real-time board synchronization with GLAS.
