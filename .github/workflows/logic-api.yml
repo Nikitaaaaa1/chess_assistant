@@ -1,0 +1,28 @@
+name: Logic API CI
+
+on:
+  push:
+    paths:
+      - 'chess-logic-api/**'
+    branches:
+      - '**'
+      - '!main'
+  pull_request:
+    paths:
+      - 'chess-logic-api/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          cd chess-logic-api
+          pip install -r requirements.txt
+      - name: Run Tests (Placeholder)
+        run: echo "Running tests for Logic API..."

@@ -1,0 +1,223 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Project Setup & Docker Infrastructure",
+        "description": "Establish the foundational multi-container Docker architecture including placeholders for microservices and the message broker.",
+        "details": "Create a `docker-compose.yml` file at the root. Define 4 services: `chess-vision-service` (Python 3.11), `chess-logic-api` (Python 3.11, FastAPI), `chess-web-ui` (Node.js/React environment), and `rabbitmq-broker` (rabbitmq:3-management-alpine). Set up base directory structures, `requirements.txt` for Python services, and `package.json` for the frontend. Ensure network bridging allows AVS to reach RabbitMQ, and GLAS to reach both RabbitMQ and the Frontend.",
+        "testStrategy": "Run `docker-compose up --build`. Verify that all four containers start without crashing and can ping each other over the internal Docker network. Access RabbitMQ Management UI at localhost:15672.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Initialize Project Directory Structure and Base Files",
+            "description": "Set up the foundational folder structure for the AVS, GLAS, and Frontend services including base dependency files.",
+            "dependencies": [],
+            "details": "Create directories at the root: `chess-vision-service/`, `chess-logic-api/`, and `chess-web-ui/`. In `chess-vision-service`, create a basic `requirements.txt` with `opencv-python` and `pika`. In `chess-logic-api`, create `requirements.txt` with `fastapi`, `uvicorn`, `pika`, and `python-chess`. For `chess-web-ui`, initialize a minimal React app (e.g., using Vite or CRA) to generate the `package.json`.\n<info added on 2026-03-22T11:53:14.757Z>\nWork Completed: Project architecture has been reconfigured to use RabbitMQ instead of Redis. The .geminiignore file has been optimized for AI context and data protection, and .gitignore was updated with comprehensive Python and Frontend patterns. Additionally, the /tasks/ directory structure and master_tasks.md have been initialized, and development was switched to the main branch.\n</info added on 2026-03-22T11:53:14.757Z>",
+            "status": "done",
+            "testStrategy": "Verify that all three directories exist and contain their respective dependency definition files.",
+            "parentId": "undefined",
+            "updatedAt": "2026-03-22T14:20:06.017Z"
+          },
+          {
+            "id": 2,
+            "title": "Create Dockerfile for Chess Vision Service",
+            "description": "Define the container image for the Advanced Vision System (AVS) using Python 3.11.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a `Dockerfile` in the `chess-vision-service/` directory. Use `python:3.11-slim` as the base image. Install essential system dependencies required for OpenCV such as `libgl1-mesa-glx` and `libglib2.0-0`. Copy the `requirements.txt`, run `pip install -r requirements.txt`, and copy a placeholder `main.py` that contains an infinite loop or basic logging to keep the container alive.",
+            "status": "pending",
+            "testStrategy": "Run `docker build -t chess-vision-service ./chess-vision-service` and ensure the image builds successfully without dependency or OS package errors.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Create Dockerfile for Chess Logic API",
+            "description": "Define the container image for the Game Logic and API System (GLAS) using Python 3.11 and FastAPI.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a `Dockerfile` in the `chess-logic-api/` directory. Use the `python:3.11-slim` base image. Set the working directory, copy `requirements.txt`, and run `pip install -r requirements.txt`. Copy a placeholder `main.py` with a basic FastAPI app instance. Expose port 8000 and set the CMD to `uvicorn main:app --host 0.0.0.0 --port 8000`.",
+            "status": "pending",
+            "testStrategy": "Run `docker build -t chess-logic-api ./chess-logic-api` and ensure the image builds successfully.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Create Dockerfile for Chess Web UI",
+            "description": "Define the container environment for the React frontend.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a `Dockerfile` in the `chess-web-ui/` directory. Use `node:18-alpine` as the base image to keep it lightweight. Set the working directory to `/app`, copy `package.json` and lock files, and run `npm install`. Copy the rest of the source code, expose port 3000 (or the default Vite port), and set the startup command (e.g., `npm start` or `npm run dev`).",
+            "status": "pending",
+            "testStrategy": "Run `docker build -t chess-web-ui ./chess-web-ui` and verify the Node.js environment compiles the image properly.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Create Root docker-compose.yml and Configure Networking",
+            "description": "Combine all services into a single Docker Compose orchestration file with appropriate network bridging.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create `docker-compose.yml` at the project root. Define 4 services: `chess-vision-service`, `chess-logic-api` (mapped to port 8000), `chess-web-ui` (mapped to port 3000), and `rabbitmq-broker` (using image `rabbitmq:3-management-alpine`, mapped to ports 5672 and 15672). Define a custom Docker bridge network named `chess-net` and attach all four services to this network to ensure they can resolve each other by container name.",
+            "status": "pending",
+            "testStrategy": "Run `docker-compose up --build -d`. Verify all containers are 'Up'. Execute `docker exec -it <chess-logic-api-container> ping rabbitmq-broker` to test internal DNS resolution and network connectivity.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-22T14:20:06.017Z"
+      },
+      {
+        "id": "2",
+        "title": "AVS - Camera Capture & Perspective Calibration",
+        "description": "Implement video stream capture from dual cameras and set up board corner detection for perspective transformation.",
+        "details": "In `chess-vision-service`, use OpenCV (`cv2.VideoCapture`) to ingest two simultaneous video streams. Implement an interactive or marker-based calibration script to map the 4 physical corners of the chessboard to a perfect 2D square image (perspective warp). Calculate the bounding box for each of the 64 squares (algebraic notation A1-H8) on the warped image.",
+        "testStrategy": "Feed sample video files or live camera feeds. Visualize the output with grid overlays representing the 64 squares drawn on the warped chessboard image to verify perfect alignment.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "3",
+        "title": "AVS - YOLO Piece Detection & Multi-Camera Fusion",
+        "description": "Integrate YOLO for piece detection and fuse data from both cameras to mitigate occlusion.",
+        "details": "Load a YOLO model using Ultralytics and `onnxruntime` for inference. Run inference on both camera frames. Implement a fusion algorithm: if a square is occluded in Camera A's view, rely on Camera B's confidence score. Map detected piece centroids to the 64 calibrated squares. Generate an aggregate internal board state (e.g., a dictionary mapping square strings to piece labels).",
+        "testStrategy": "Place physical pieces in configurations known to cause occlusion. Run inference and verify that the fused output achieves >95% accuracy in correctly identifying occupied squares and piece colors.",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "4",
+        "title": "GLAS - Core Game Logic & API Skeleton",
+        "description": "Set up the FastAPI server, integrate python-chess for virtual state management, and create session endpoints.",
+        "details": "Initialize FastAPI in `chess-logic-api`. Wrap `python-chess.Board()` in a session manager class to maintain virtual game state. Create REST endpoints: `POST /api/session/start` (params: mode=analysis|ai, difficulty=int) and `POST /api/session/undo`. Implement basic move validation to detect illegal moves based on standard chess rules using python-chess's `is_legal` method.",
+        "testStrategy": "Use cURL or Postman to initialize a session, request the current FEN, attempt a legal move via API, and attempt an illegal move to verify proper rejection and state maintenance.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "5",
+        "title": "Inter-Service Communication (RabbitMQ)",
+        "description": "Establish the data flow from AVS to GLAS utilizing RabbitMQ.",
+        "details": "In AVS, format the fused board state into a structured JSON string and use the `pika` library to publish to a RabbitMQ queue named `board_state_queue`. In GLAS, run an asyncio background task that consumes from `board_state_queue`. Write a difference engine to compare incoming physical states with the internal `python-chess` state to infer which move was just physically played.",
+        "testStrategy": "Mock AVS publisher with a script sending state changes to RabbitMQ. Verify GLAS logs confirm receipt of the state, correctly infer the move made (e.g., 'E2E4'), and update the `python-chess` board.",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "6",
+        "title": "GLAS - Stockfish Engine Integration",
+        "description": "Integrate the Stockfish 16 engine for AI opponent mode move generation.",
+        "details": "Download Stockfish 16 into the GLAS container. Create an `EngineService` class using `python-chess.engine` to communicate via UCI protocol. Configure the engine limits and parameters based on the session's difficulty (`skill_level`). Create an internal method to request the best move given the current FEN when it is the AI's turn.",
+        "testStrategy": "Write unit tests providing various FEN strings to the `EngineService`. Assert that valid UCI moves are returned within the expected time limit and vary logically with different skill_level parameters.",
+        "priority": "medium",
+        "dependencies": [
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "7",
+        "title": "GLAS - AI Execution Lock & Synchronization Logic",
+        "description": "Implement the state machine enforcing physical synchronization between AI suggestions and board state.",
+        "details": "Add a `lock_status` property to the session manager. When Stockfish yields a move, set status to `LOCKED_WAITING_FOR_PHYSICAL_AI_MOVE`. During this state, reject any new human moves. Modify the RabbitMQ consumer to monitor strictly the source and destination squares of the AI's move. Once AVS reports the piece is physically on the correct destination square (and source is empty), transition state back to `READY`.",
+        "testStrategy": "Simulate a game flow via unit tests. Trigger an AI move. Send simulated RabbitMQ state updates mimicking a human playing out of turn (should be rejected), then mimic the correct AI physical move (should release the lock).",
+        "priority": "high",
+        "dependencies": [
+          "5",
+          "6"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "8",
+        "title": "GLAS - WebSocket Broadcasting",
+        "description": "Implement WebSocket endpoints in FastAPI to push real-time game updates to the frontend.",
+        "details": "Create a WebSocket endpoint `WS /ws/game-state`. Maintain a list of active connections. Hook into the GLAS state manager to broadcast JSON payloads on state changes. Payloads should include FEN strings, move confirmations `{\"type\": \"MOVE_CONFIRMED\", \"fen\": \"...\"}`, AI suggestions `{\"type\": \"AI_SUGGESTION\", \"move\": \"e2e4\"}`, and illegal move alerts.",
+        "testStrategy": "Use a WebSocket client like `wscat` to connect to the GLAS endpoint. Trigger internal state changes and verify that valid JSON updates are pushed instantly.",
+        "priority": "medium",
+        "dependencies": [
+          "4",
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "9",
+        "title": "Frontend - Web UI & Virtual Board Skeletons",
+        "description": "Develop the React interface containing the chessboard, camera streams, and control panel.",
+        "details": "In `chess-web-ui`, scaffold a React app with TailwindCSS. Integrate a library like `react-chessboard` for the virtual board. Build the Control Panel component (New Game, Mode Dropdown, Difficulty Slider, Undo button). Add placeholder containers or MJPEG `<img>` tags for the AVS live camera feeds. Map control panel actions to GLAS REST API endpoints.",
+        "testStrategy": "Run React app locally. Verify UI renders correctly across desktop viewports. Click control panel buttons and verify network requests are dispatched to GLAS endpoints.",
+        "priority": "medium",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "10",
+        "title": "Frontend - State Synchronization & Alert Overlay",
+        "description": "Connect UI to WebSockets and implement context-aware alert banners.",
+        "details": "Implement a custom React hook `useChessWebSocket` to manage the WS connection to GLAS. Bind the incoming FEN string to the `react-chessboard` prop to enforce exact synchronization. Implement conditional rendering for alert overlays: if `type: AI_SUGGESTION` is received, display 'AI MOVE: [move] (WAITING FOR SYNC)'. If an illegal move alert is received, flash a red warning. Measure and optimize end-to-end latency to ensure sub-2s response.",
+        "testStrategy": "End-to-End test: Initialize game, make a physical move (simulated), verify virtual board updates < 2s. Wait for AI response, verify 'WAITING FOR SYNC' banner appears, complete physical AI move, verify banner disappears.",
+        "priority": "high",
+        "dependencies": [
+          "8",
+          "9"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "CI/CD Pipeline - GitHub Actions",
+        "description": "Establish modular CI pipelines and a general main-merge validation workflow.",
+        "details": "Create path-filtered workflows for vision-service, logic-api, and web-ui. Implement a master main-branch workflow for integration checks.",
+        "testStrategy": "Verify path-based triggers and successful workflow execution on GitHub.",
+        "priority": "low",
+        "dependencies": [
+          "1"
+        ],
+        "status": "in-progress",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-22T14:58:00.000Z",
+      "taskCount": 11,
+      "completedCount": 0,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

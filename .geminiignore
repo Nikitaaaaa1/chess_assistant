@@ -1,0 +1,73 @@
+# --- Gemini CLI Ignore File ---
+# Purpose: Optimize context usage and protect secrets.
+
+# == Secrets & Sensitive Data ==
+.env
+.env.*
+.git/
+.ssh/
+secrets/
+certs/
+*.pem
+*.key
+*.p12
+
+# == Dependency Directories ==
+node_modules/
+vendor/
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# == Build Artifacts & Distribution ==
+dist/
+build/
+out/
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+target/
+.cache/
+
+# == IDE & System Files ==
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+
+# == Media & Large Assets (Crucial for Chess/Vision Project) ==
+# Ignore raw video captures, dataset images, and large weights to save context.
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+datasets/
+runs/
+*.pt
+*.onnx
+*.weights
+*.h5
+
+# == Project Specific ==
+# Keep .taskmaster and knowledge_base as they contain critical context.
+# Ignore large temporary reports if they start accumulating.
+.taskmaster/reports/*.html
+.taskmaster/reports/*.pdf
+
+# == Documentation Overrides ==
+# Ensure these are ALWAYS indexed regardless of size.
+!prd.txt
+!GEMINI.md
+!README.md
+!LICENSE

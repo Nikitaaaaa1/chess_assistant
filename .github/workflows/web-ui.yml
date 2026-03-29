@@ -1,0 +1,30 @@
+name: Web UI CI
+
+on:
+  push:
+    paths:
+      - 'chess-web-ui/**'
+    branches:
+      - '**'
+      - '!main'
+  pull_request:
+    paths:
+      - 'chess-web-ui/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          cd chess-web-ui
+          npm install
+      - name: Build (Check)
+        run: |
+          cd chess-web-ui
+          echo "Verifying build..."

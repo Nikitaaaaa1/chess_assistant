@@ -1,0 +1,60 @@
+PRD: Real-Time AI Chess Tracking & Assistant System
+1. Project Objective
+To develop a Raspberry Pi-based system that uses dual cameras to track a physical chess game in real-time, validates moves, offers an AI opponent mode, and enforces physical synchronization between the board and engine suggestions.
+2. System Architecture (Micro-services)
+The system is decoupled into two independent logical containers communicating via REST API/WebSockets or a Message Broker:
+A. Module: AI Vision Service (AVS)
+Responsibility: Converting raw video streams into structured data.
+Input: 2x Video Streams (USB/CSI).
+Key Tasks:
+Board corner detection and calibration.
+Piece detection using a YOLO model (Inference).
+Data fusion from two cameras to eliminate occlusion (pieces blocking each other).
+Mapping image coordinates to algebraic notation (e.g., E2, E4).
+Output: The current "visual" state of the board sent to GLAS.
+B. Module: Game Logic & API Service (GLAS)
+Responsibility: Managing the session, game rules, and the AI engine.
+Key Tasks:
+Maintaining the virtual game state using python-chess.
+Communication with the Stockfish engine (UCI Protocol).
+Managing the "Lock" state (preventing illegal moves or out-of-turn play).
+Handling WebSockets for the Frontend.
+Output: User instructions, FEN strings, and move suggestions.
+3. Core Functionalities
+3.1 Session Management
+Users can initialize a new session via the web interface.
+Mode Selection: Analysis (tracking only) or AI Opponent (engine responds to moves).
+Difficulty settings (Stockfish skill_level).
+3.2 Real-Time Tracking
+The system must detect a move within 1 second of the board stabilizing (i.e., hand removed).
+Illegal move detection (e.g., a Knight moving in a straight line) with instant web notification.
+3.3 AI Opponent Mode & Move Validation (Locking)
+The sequence for the "AI execution lock" is as follows:
+State: Player Move – The system waits for the human to move.
+State: AI Calculating – Once the human move is detected, GLAS queries Stockfish.
+State: AI Execution (Lock) – GLAS pushes the AI's move to the Frontend. Session status becomes LOCKED_WAITING_FOR_PHYSICAL_AI_MOVE.
+The API rejects any further player moves.
+AVS specifically monitors the "Source" and "Destination" squares of the AI move.
+State: Verification – Once AVS confirms the AI piece is physically placed correctly, GLAS releases the lock (status: READY).
+4. Technology Stack (Dockerized)
+Module	Technology	Docker Image
+AI Vision Service	Python 3.11, OpenCV, Ultralytics (YOLO), ONNX Runtime	chess-vision-service
+Game Logic & API	FastAPI, python-chess, Stockfish 16	chess-logic-api
+Frontend UI	React.js, TailwindCSS, Chessboard.js	chess-web-ui
+Message Broker	RabbitMQ (For AVS to GLAS communication)	rabbitmq:3-management-alpine
+5. Data Flow
+AVS publishes the detected board state to RabbitMQ (Direct Exchange/Queue): {"detected_state": "rnbqkbnr/pppppppp/..."}.
+GLAS consumes from the queue, compares the state with the previous one, and validates the move.
+GLAS pushes updates to the Frontend via WebSocket: {"type": "MOVE_CONFIRMED", "fen": "..."}.
+If it is the AI's turn: GLAS queries Stockfish → sends to Frontend: {"type": "AI_SUGGESTION", "move": "e2e4"} → sets internal lock = true.
+6. Web UI / Management Portal
+Live Preview: Streams from both cameras (switchable).
+Virtual Board: Perfectly synced with the physical board.
+Control Panel: * "New Game" button.
+Difficulty slider.
+"Undo Move" (forces a physical piece reset).
+Alert Overlay: Large banners like "YOUR TURN" or "AI MOVE: E2 -> E4 (WAITING FOR SYNC)".
+7. Acceptance Criteria (Success Metrics)
+Piece Detection Accuracy: >95% under controlled lighting.
+Latency: Time between physical move and web update < 2s.
+Security: System correctly blocks game progression until the AI's physical move is verified.

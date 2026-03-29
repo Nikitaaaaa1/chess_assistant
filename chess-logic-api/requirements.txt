@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pika
+python-chess
+pydantic
+pydantic-settings
+asyncio
