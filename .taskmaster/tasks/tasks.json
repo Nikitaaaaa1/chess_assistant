@@ -85,7 +85,7 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -98,7 +98,7 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -119,7 +119,7 @@
         "title": "Inter-Service Communication (RabbitMQ)",
         "description": "Establish the data flow from AVS to GLAS utilizing RabbitMQ.",
         "details": "In AVS, format the fused board state into a structured JSON string and use the `pika` library to publish to a RabbitMQ queue named `board_state_queue`. In GLAS, run an asyncio background task that consumes from `board_state_queue`. Write a difference engine to compare incoming physical states with the internal `python-chess` state to infer which move was just physically played.",
-        "testStrategy": "Mock AVS publisher with a script sending state changes to RabbitMQ. Verify GLAS logs confirm receipt of the state, correctly infer the move made (e.g., 'E2E4'), and update the `python-chess` board.",
+        "testStrategy": "Mock AVS publisher with a script sending state changes to RabbitMQ. Verify GLAS logs confirm receipt of the state, correctly infer the move made (e.g., 'E2E4'), and update the `python-chess board.",
         "priority": "high",
         "dependencies": [
           "3",
@@ -179,8 +179,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "in-progress",
+        "subtasks": [],
+        "updatedAt": "2026-03-29T10:15:05.887Z"
       },
       {
         "id": "10",
@@ -212,9 +213,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-22T14:58:00.000Z",
+      "lastModified": "2026-03-29T10:15:05.887Z",
       "taskCount": 11,
-      "completedCount": 0,
+      "completedCount": 2,
       "tags": [
         "master"
       ]

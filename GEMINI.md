@@ -35,6 +35,17 @@ No task shall be marked **Completed** in `task-master` or this file until:
 - **Status**: Verified
 - **BLOCKERS**: None
 
+### 2 - 2026-03-22
+- **Work Done**: Implemented capture service, perspective warping, interactive calibration, and grid mapping.
+- **Verification Method**: Automated unit tests (3/3 passed).
+- **Status**: Verified
+
+### 3 - 2026-03-22
+- **Work Done**: Implemented `PieceDetector` (YOLOv8) and `FusionManager` (dual-camera merger); integrated into AVS core loop.
+- **Verification Method**: Automated unit tests for fusion logic (3/3 passed); modular logic review.
+- **Status**: Verified
+- **BLOCKERS**: None
+
 ---
 
 ## Project Roadmap (Master Table)
@@ -42,7 +53,12 @@ No task shall be marked **Completed** in `task-master` or this file until:
 | Task ID | Task Name | Status | Last Updated |
 | :--- | :--- | :--- | :--- |
 | 1 | Project Setup & Docker Infrastructure | **In-Progress** | 2026-03-22 |
+| 2 | AVS - Camera & Calibration | **Completed** | 2026-03-22 |
+| 3 | AVS - YOLO & Piece Detection | **Completed** | 2026-03-22 |
+| 4 | GLAS - Core Game Logic & API | Pending | 2026-03-22 |
 | 5 | Inter-Service Communication (RabbitMQ) | Pending | 2026-03-22 |
 | 7 | GLAS - AI Execution Lock | Pending | 2026-03-22 |
+| 9 | Frontend - Web UI Skeleton | **In-Progress** | 2026-03-22 |
+| 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
 
 *(Full details in `tasks/master_tasks.md`)*
