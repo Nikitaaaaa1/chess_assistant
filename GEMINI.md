@@ -30,8 +30,14 @@ No task shall be marked **Completed** in `task-master` or this file until:
 ## Progress Log
 
 ### 1.1 - 2026-03-22
-- **Work Done**: Created service directories (`chess-vision-service`, `chess-logic-api`, `chess-web-ui`); initialized base dependency files with `pika`, `fastapi`, `python-chess`, and `react-chessboard`.
-- **Verification Method**: Manual confirmation of directory structure and dependency declarations.
+- **Work Done**: Created service directories; initialized base dependency files.
+- **Verification Method**: Manual confirmation of directory structure.
+- **Status**: Verified
+- **BLOCKERS**: None
+
+### 2.1, 2.2, & 2.3 - 2026-03-22
+- **Work Done**: Implemented capture service, perspective warping, interactive calibration, and 64-square grid mapping (algebraic notation). Integrated all into `main.py`.
+- **Verification Method**: Automated unit tests (3/3 passed) and visual code inspection of the `GridManager` mapping logic.
 - **Status**: Verified
 - **BLOCKERS**: None
 
@@ -42,7 +48,7 @@ No task shall be marked **Completed** in `task-master` or this file until:
 | Task ID | Task Name | Status | Last Updated |
 | :--- | :--- | :--- | :--- |
 | 1 | Project Setup & Docker Infrastructure | **In-Progress** | 2026-03-22 |
-| 5 | Inter-Service Communication (RabbitMQ) | Pending | 2026-03-22 |
-| 7 | GLAS - AI Execution Lock | Pending | 2026-03-22 |
+| 2 | AVS - Camera & Calibration | **Completed** | 2026-03-22 |
+| 3 | AVS - YOLO & Piece Detection | Pending | 2026-03-22 |
 
 *(Full details in `tasks/master_tasks.md`)*
