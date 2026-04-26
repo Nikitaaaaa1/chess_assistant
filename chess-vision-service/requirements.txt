@@ -2,3 +2,5 @@ opencv-python
 pika
 numpy
 pyyaml
+ultralytics
+onnxruntime
