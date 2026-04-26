@@ -5,3 +5,5 @@ python-chess
 pydantic
 pydantic-settings
 asyncio
+pytest
+httpx
