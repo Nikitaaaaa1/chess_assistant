@@ -2,7 +2,7 @@
   "master": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Project Setup & Docker Infrastructure",
         "description": "Establish the foundational multi-container Docker architecture including placeholders for microservices and the message broker.",
         "details": "Create a `docker-compose.yml` file at the root. Define 4 services: `chess-vision-service` (Python 3.11), `chess-logic-api` (Python 3.11, FastAPI), `chess-web-ui` (Node.js/React environment), and `rabbitmq-broker` (rabbitmq:3-management-alpine). Set up base directory structures, `requirements.txt` for Python services, and `package.json` for the frontend. Ensure network bridging allows AVS to reach RabbitMQ, and GLAS to reach both RabbitMQ and the Frontend.",
@@ -80,7 +80,7 @@
         "updatedAt": "2026-04-26T10:25:15.580Z"
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "AVS - Camera Capture & Perspective Calibration",
         "description": "Implement video stream capture from dual cameras and set up board corner detection for perspective transformation.",
         "details": "In `chess-vision-service`, use OpenCV (`cv2.VideoCapture`) to ingest two simultaneous video streams. Implement an interactive or marker-based calibration script to map the 4 physical corners of the chessboard to a perfect 2D square image (perspective warp). Calculate the bounding box for each of the 64 squares (algebraic notation A1-H8) on the warped image.",
@@ -98,7 +98,8 @@
             "dependencies": [],
             "details": "Create a `CameraManager` class using `cv2.VideoCapture` that initializes two separate threads for fetching frames (e.g., from /dev/video0 and /dev/video1, or RTSP). Utilizing threading will prevent I/O blocking from dropping frames. Expose a `get_latest_frames()` method returning a synchronized tuple of frames.",
             "status": "pending",
-            "testStrategy": "Write a test script that opens both cameras, grabs 100 consecutive frames from each, calculates the resulting FPS, and displays them side-by-side to verify real-time performance without lag."
+            "testStrategy": "Write a test script that opens both cameras, grabs 100 consecutive frames from each, calculates the resulting FPS, and displays them side-by-side to verify real-time performance without lag.",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -109,7 +110,8 @@
             ],
             "details": "Create a calibration utility utilizing `cv2.setMouseCallback` to interactively record 4 (x,y) pixel coordinates per camera view. Establish a defined clicking order (e.g., top-left, top-right, bottom-right, bottom-left) and save these coordinates to a JSON configuration file (`calibration.json`) for persistence.",
             "status": "pending",
-            "testStrategy": "Run the calibration tool, click 4 corners on both camera feeds, and verify that the `calibration.json` file is accurately written with the captured pixel coordinates and appropriate camera identifiers."
+            "testStrategy": "Run the calibration tool, click 4 corners on both camera feeds, and verify that the `calibration.json` file is accurately written with the captured pixel coordinates and appropriate camera identifiers.",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -120,7 +122,8 @@
             ],
             "details": "Load the saved `calibration.json`. Define a fixed target square size (e.g., 800x800 pixels). Use `cv2.getPerspectiveTransform` to map the 4 physical corner coordinates to the target size corners. Apply `cv2.warpPerspective` to all incoming frames to generate top-down, overhead views of the board.",
             "status": "pending",
-            "testStrategy": "Load the calibration data, fetch a live camera frame, apply the warp perspective, and display the resulting image. Verify visually that the output is a perfectly undistorted square chessboard."
+            "testStrategy": "Load the calibration data, fetch a live camera frame, apply the warp perspective, and display the resulting image. Verify visually that the output is a perfectly undistorted square chessboard.",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -131,7 +134,8 @@
             ],
             "details": "Create a function `get_square_coordinates(board_size)` that evenly divides the warped image dimension (e.g., 800x800) into 64 uniform 100x100 pixel bounding boxes. Generate a dictionary mapping square labels ('a1' to 'h8') to their `(x_min, y_min, x_max, y_max)` tuples, correctly factoring in the orientation (White pieces at the bottom).",
             "status": "pending",
-            "testStrategy": "Write a unit test validating that the returned dictionary contains exactly 64 keys matching the regex `^[a-h][1-8]$` and verify the bounding box coordinates for corner squares like 'a1', 'h1', 'a8', and 'h8' are mathematically correct."
+            "testStrategy": "Write a unit test validating that the returned dictionary contains exactly 64 keys matching the regex `^[a-h][1-8]$` and verify the bounding box coordinates for corner squares like 'a1', 'h1', 'a8', and 'h8' are mathematically correct.",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -142,12 +146,13 @@
             ],
             "details": "Iterate through the dictionary of calculated bounding boxes. Use `cv2.rectangle` to draw grid lines representing the boundaries of each cell and `cv2.putText` to write the algebraic notation (A1-H8) centered within each square. Stream this output for live inspection.",
             "status": "pending",
-            "testStrategy": "Run the visualization script against a live or pre-recorded camera feed of the chessboard. Visually inspect the output to guarantee that the generated grid perfectly aligns with the physical squares of the board."
+            "testStrategy": "Run the visualization script against a live or pre-recorded camera feed of the chessboard. Visually inspect the output to guarantee that the generated grid perfectly aligns with the physical squares of the board.",
+            "parentId": "undefined"
           }
         ]
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "AVS - YOLO Piece Detection & Multi-Camera Fusion",
         "description": "Integrate YOLO for piece detection and fuse data from both cameras to mitigate occlusion.",
         "details": "Load a YOLO model using Ultralytics and `onnxruntime` for inference. Run inference on both camera frames. Implement a fusion algorithm: if a square is occluded in Camera A's view, rely on Camera B's confidence score. Map detected piece centroids to the 64 calibrated squares. Generate an aggregate internal board state (e.g., a dictionary mapping square strings to piece labels).",
@@ -160,7 +165,7 @@
         "subtasks": []
       },
       {
-        "id": 4,
+        "id": "4",
         "title": "GLAS - Core Game Logic & API Skeleton",
         "description": "Set up the FastAPI server, integrate python-chess for virtual state management, and create session endpoints.",
         "details": "Initialize FastAPI in `chess-logic-api`. Wrap `python-chess.Board()` in a session manager class to maintain virtual game state. Create REST endpoints: `POST /api/session/start` (params: mode=analysis|ai, difficulty=int) and `POST /api/session/undo`. Implement basic move validation to detect illegal moves based on standard chess rules using python-chess's `is_legal` method.",
@@ -173,7 +178,7 @@
         "subtasks": []
       },
       {
-        "id": 5,
+        "id": "5",
         "title": "Inter-Service Communication (RabbitMQ)",
         "description": "Establish the data flow from AVS to GLAS utilizing RabbitMQ.",
         "details": "In AVS, format the fused board state into a structured JSON string and use the `pika` library to publish to a RabbitMQ queue named `board_state_queue`. In GLAS, run an asyncio background task that consumes from `board_state_queue`. Write a difference engine to compare incoming physical states with the internal `python-chess` state to infer which move was just physically played.",
@@ -187,7 +192,7 @@
         "subtasks": []
       },
       {
-        "id": 6,
+        "id": "6",
         "title": "GLAS - Stockfish Engine Integration",
         "description": "Integrate the Stockfish 16 engine for AI opponent mode move generation.",
         "details": "Download Stockfish 16 into the GLAS container. Create an `EngineService` class using `python-chess.engine` to communicate via UCI protocol. Configure the engine limits and parameters based on the session's difficulty (`skill_level`). Create an internal method to request the best move given the current FEN when it is the AI's turn.",
@@ -200,7 +205,7 @@
         "subtasks": []
       },
       {
-        "id": 7,
+        "id": "7",
         "title": "GLAS - AI Execution Lock & Synchronization Logic",
         "description": "Implement the state machine enforcing physical synchronization between AI suggestions and board state.",
         "details": "Add a `lock_status` property to the session manager. When Stockfish yields a move, set status to `LOCKED_WAITING_FOR_PHYSICAL_AI_MOVE`. During this state, reject any new human moves. Modify the RabbitMQ consumer to monitor strictly the source and destination squares of the AI's move. Once AVS reports the piece is physically on the correct destination square (and source is empty), transition state back to `READY`.",
@@ -214,7 +219,7 @@
         "subtasks": []
       },
       {
-        "id": 8,
+        "id": "8",
         "title": "GLAS - WebSocket Broadcasting",
         "description": "Implement WebSocket endpoints in FastAPI to push real-time game updates to the frontend.",
         "details": "Create a WebSocket endpoint `WS /ws/game-state`. Maintain a list of active connections. Hook into the GLAS state manager to broadcast JSON payloads on state changes. Payloads should include FEN strings, move confirmations `{\"type\": \"MOVE_CONFIRMED\", \"fen\": \"...\"}`, AI suggestions `{\"type\": \"AI_SUGGESTION\", \"move\": \"e2e4\"}`, and illegal move alerts.",
@@ -228,7 +233,7 @@
         "subtasks": []
       },
       {
-        "id": 9,
+        "id": "9",
         "title": "Frontend - Web UI & Virtual Board Skeletons",
         "description": "Develop the React interface containing the chessboard, camera streams, and control panel.",
         "details": "In `chess-web-ui`, scaffold a React app with TailwindCSS. Integrate a library like `react-chessboard` for the virtual board. Build the Control Panel component (New Game, Mode Dropdown, Difficulty Slider, Undo button). Add placeholder containers or MJPEG `<img>` tags for the AVS live camera feeds. Map control panel actions to GLAS REST API endpoints.",
@@ -237,11 +242,12 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-04-26T10:32:06.404Z"
       },
       {
-        "id": 10,
+        "id": "10",
         "title": "Frontend - State Synchronization & Alert Overlay",
         "description": "Connect UI to WebSockets and implement context-aware alert banners.",
         "details": "Implement a custom React hook `useChessWebSocket` to manage the WS connection to GLAS. Bind the incoming FEN string to the `react-chessboard` prop to enforce exact synchronization. Implement conditional rendering for alert overlays: if `type: AI_SUGGESTION` is received, display 'AI MOVE: [move] (WAITING FOR SYNC)'. If an illegal move alert is received, flash a red warning. Measure and optimize end-to-end latency to ensure sub-2s response.",
@@ -255,7 +261,7 @@
         "subtasks": []
       },
       {
-        "id": 11,
+        "id": "11",
         "title": "CI/CD Pipeline - GitHub Actions",
         "description": "Establish modular CI pipelines and a general main-merge validation workflow.",
         "details": "Create path-filtered workflows for vision-service, logic-api, and web-ui. Implement a master main-branch workflow for integration checks.",
@@ -270,14 +276,12 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-04-26T10:25:15.581Z",
+      "lastModified": "2026-04-26T10:32:06.404Z",
       "taskCount": 11,
-      "completedCount": 1,
+      "completedCount": 2,
       "tags": [
         "master"
-      ],
-      "created": "2026-04-26T10:25:37.586Z",
-      "description": "Tasks for master context"
+      ]
     }
   }
 }
