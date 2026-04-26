@@ -39,6 +39,12 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 - **Status**: Verified
 - **BLOCKERS**: None
 
+### 9 - 2026-03-22
+- **Work Done**: Scaffolded Vite/React frontend; implemented `ChessBoardView`, `ControlPanel`, and `VisionPreview` components with TailwindCSS styling. Established a modern "Control Center" dashboard layout.
+- **Verification Method**: Manual confirmation of file structure and component logic (mock-ready).
+- **Status**: Verified
+- **BLOCKERS**: None
+
 ---
 
 ## Project Roadmap (Master Table)
@@ -49,5 +55,7 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 | 2 | AVS - Camera & Calibration | **Completed** | 2026-03-22 |
 | 3 | AVS - YOLO & Piece Detection | **Completed** | 2026-03-22 |
 | 4 | GLAS - Core Game Logic & API | **In-Progress** | 2026-03-22 |
+| 9 | Frontend - Web UI Skeleton | **Completed** | 2026-03-22 |
+| 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
 
 *(Full details in `tasks/master_tasks.md`)*
