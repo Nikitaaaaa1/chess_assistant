@@ -89,67 +89,47 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
-            "title": "Implement dual camera video stream capture using OpenCV",
-            "description": "Set up a Python module in the chess-vision-service to reliably capture synchronized frames from two simultaneous camera feeds.",
+            "title": "Dual Camera Capture and Frame Ingestion",
+            "description": "Implement a video stream manager to ingest and synchronize feeds from two cameras simultaneously using OpenCV.",
             "dependencies": [],
-            "details": "Create a `CameraManager` class using `cv2.VideoCapture` that initializes two separate threads for fetching frames (e.g., from /dev/video0 and /dev/video1, or RTSP). Utilizing threading will prevent I/O blocking from dropping frames. Expose a `get_latest_frames()` method returning a synchronized tuple of frames.",
-            "status": "pending",
-            "testStrategy": "Write a test script that opens both cameras, grabs 100 consecutive frames from each, calculates the resulting FPS, and displays them side-by-side to verify real-time performance without lag.",
+            "details": "Create a `CameraManager` module in the `chess-vision-service`. Use `cv2.VideoCapture` to connect to two distinct video sources (webcams or RTSP streams). Implement dedicated thread runners to constantly read the latest frames into a buffer to prevent frame lag and dropping. Provide an interface to safely fetch the latest synchronized frame pair for downstream processing.",
+            "status": "done",
+            "testStrategy": "Run a standalone Python script instantiating the CameraManager. Display the two video feeds side-by-side in an OpenCV `imshow` window. Verify framerates remain stable and latency is minimal.",
+            "updatedAt": "2026-03-29T09:51:47.104Z",
             "parentId": "undefined"
           },
           {
             "id": 2,
-            "title": "Implement interactive chessboard corner selection mechanism",
-            "description": "Develop a calibration script to capture static frames and allow a user to manually click the 4 outermost physical corners of the chessboard.",
+            "title": "Interactive Board Corner Calibration Tool",
+            "description": "Build an interactive OpenCV utility to select physical board corners and generate perspective transformation matrices.",
             "dependencies": [
               1
             ],
-            "details": "Create a calibration utility utilizing `cv2.setMouseCallback` to interactively record 4 (x,y) pixel coordinates per camera view. Establish a defined clicking order (e.g., top-left, top-right, bottom-right, bottom-left) and save these coordinates to a JSON configuration file (`calibration.json`) for persistence.",
-            "status": "pending",
-            "testStrategy": "Run the calibration tool, click 4 corners on both camera feeds, and verify that the `calibration.json` file is accurately written with the captured pixel coordinates and appropriate camera identifiers.",
-            "parentId": "undefined"
+            "details": "Implement an interactive calibration script using `cv2.setMouseCallback`. The utility must prompt the user to click the 4 outer corners of the chessboard on both camera feeds. Calculate the transformation matrices using `cv2.getPerspectiveTransform` and warp the images to a 2D top-down square using `cv2.warpPerspective`. Persist the selected coordinates and the resulting matrices into a `calibration_config.json` file for the main service to load on startup.",
+            "status": "done",
+            "testStrategy": "Execute the calibration script on live dual feeds. Click the 4 corners, apply the warp, and visually verify the resulting images isolate the chessboard as a perfect square. Restart the app and verify the calibration loads from the JSON file correctly.",
+            "parentId": "undefined",
+            "updatedAt": "2026-03-29T09:54:46.059Z"
           },
           {
             "id": 3,
-            "title": "Apply perspective transformation (homography warp)",
-            "description": "Use the recorded corner coordinates to compute a perspective transform matrix and warp the angled camera frames into perfectly flat 2D square images.",
+            "title": "64-Square Grid Division and Coordinate Mapping",
+            "description": "Subdivide the perspective-warped board image into 64 bounding boxes and map them to standard algebraic chess notation.",
             "dependencies": [
               2
             ],
-            "details": "Load the saved `calibration.json`. Define a fixed target square size (e.g., 800x800 pixels). Use `cv2.getPerspectiveTransform` to map the 4 physical corner coordinates to the target size corners. Apply `cv2.warpPerspective` to all incoming frames to generate top-down, overhead views of the board.",
-            "status": "pending",
-            "testStrategy": "Load the calibration data, fetch a live camera frame, apply the warp perspective, and display the resulting image. Verify visually that the output is a perfectly undistorted square chessboard.",
-            "parentId": "undefined"
-          },
-          {
-            "id": 4,
-            "title": "Calculate bounding boxes for the 64 algebraic squares",
-            "description": "Divide the perfectly warped 2D chessboard image into an 8x8 grid and map each pixel region to its standard algebraic notation.",
-            "dependencies": [
-              3
-            ],
-            "details": "Create a function `get_square_coordinates(board_size)` that evenly divides the warped image dimension (e.g., 800x800) into 64 uniform 100x100 pixel bounding boxes. Generate a dictionary mapping square labels ('a1' to 'h8') to their `(x_min, y_min, x_max, y_max)` tuples, correctly factoring in the orientation (White pieces at the bottom).",
-            "status": "pending",
-            "testStrategy": "Write a unit test validating that the returned dictionary contains exactly 64 keys matching the regex `^[a-h][1-8]$` and verify the bounding box coordinates for corner squares like 'a1', 'h1', 'a8', and 'h8' are mathematically correct.",
-            "parentId": "undefined"
-          },
-          {
-            "id": 5,
-            "title": "Create visualization script with grid overlays",
-            "description": "Implement a visual debug overlay that draws the 64 square bounding boxes and their algebraic labels directly onto the warped video frames.",
-            "dependencies": [
-              4
-            ],
-            "details": "Iterate through the dictionary of calculated bounding boxes. Use `cv2.rectangle` to draw grid lines representing the boundaries of each cell and `cv2.putText` to write the algebraic notation (A1-H8) centered within each square. Stream this output for live inspection.",
-            "status": "pending",
-            "testStrategy": "Run the visualization script against a live or pre-recorded camera feed of the chessboard. Visually inspect the output to guarantee that the generated grid perfectly aligns with the physical squares of the board.",
-            "parentId": "undefined"
+            "details": "Write a grid generator that accepts the dimensions of the newly warped top-down image and mathematically subdivides it into an 8x8 matrix. Calculate `[x, y, w, h]` bounding boxes for each of the 64 squares. Implement logic to assign algebraic notation (A1-H8) to each box, taking into account configurable board orientation (e.g., white at bottom). Expose a debug overlay function to draw these calculated boundaries onto the output frame.",
+            "status": "done",
+            "testStrategy": "Feed a sample calibrated image through the grid generator. Use the debug overlay function to draw the bounding boxes and text labels (A1-H8) onto the image. Inspect the output to confirm each box aligns perfectly with the physical squares on the board.",
+            "parentId": "undefined",
+            "updatedAt": "2026-03-29T09:55:22.477Z"
           }
-        ]
+        ],
+        "updatedAt": "2026-03-29T09:55:22.477Z"
       },
       {
         "id": "3",
@@ -161,8 +141,9 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-29T10:02:12.933Z"
       },
       {
         "id": "4",
@@ -174,8 +155,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "in-progress",
+        "subtasks": [],
+        "updatedAt": "2026-03-29T10:02:13.621Z"
       },
       {
         "id": "5",
@@ -276,9 +258,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-04-26T10:32:06.404Z",
+      "lastModified": "2026-04-26T11:00:00.000Z",
       "taskCount": 11,
-      "completedCount": 2,
+      "completedCount": 3,
       "tags": [
         "master"
       ]

@@ -3,3 +3,5 @@ pika
 numpy
 pyyaml
 pytest
+ultralytics
+onnxruntime
