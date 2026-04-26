@@ -23,3 +23,11 @@ def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+def test_cors_headers():
+    # Test that CORS headers are present when an Origin is provided
+    origin = "http://localhost:3000"
+    headers = {"Origin": origin}
+    response = client.get("/health", headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == origin
