@@ -86,7 +86,46 @@
           "1"
         ],
         "status": "done",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Dual Camera Capture and Frame Ingestion",
+            "description": "Implement a video stream manager to ingest and synchronize feeds from two cameras simultaneously using OpenCV.",
+            "dependencies": [],
+            "details": "Create a `CameraManager` module in the `chess-vision-service`. Use `cv2.VideoCapture` to connect to two distinct video sources (webcams or RTSP streams). Implement dedicated thread runners to constantly read the latest frames into a buffer to prevent frame lag and dropping. Provide an interface to safely fetch the latest synchronized frame pair for downstream processing.",
+            "status": "done",
+            "testStrategy": "Run a standalone Python script instantiating the CameraManager. Display the two video feeds side-by-side in an OpenCV `imshow` window. Verify framerates remain stable and latency is minimal.",
+            "updatedAt": "2026-03-29T09:51:47.104Z",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Interactive Board Corner Calibration Tool",
+            "description": "Build an interactive OpenCV utility to select physical board corners and generate perspective transformation matrices.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement an interactive calibration script using `cv2.setMouseCallback`. The utility must prompt the user to click the 4 outer corners of the chessboard on both camera feeds. Calculate the transformation matrices using `cv2.getPerspectiveTransform` and warp the images to a 2D top-down square using `cv2.warpPerspective`. Persist the selected coordinates and the resulting matrices into a `calibration_config.json` file for the main service to load on startup.\n<info added on 2026-03-29T09:52:03.280Z>\nWork completed includes creating calibrate.py with an interactive OpenCV GUI using cv2.setMouseCallback for manual 4-corner coordinate capture, adding JSON persistence for saving camera-specific calibration data, and implementing fallback support for both real and simulated camera streams. There are no current blockers. Next steps involve integrating the JSON config loader into main.py and proceeding to Subtask 2.3 for grid division logic mapping.\n</info added on 2026-03-29T09:52:03.280Z>",
+            "status": "done",
+            "testStrategy": "Execute the calibration script on live dual feeds. Click the 4 corners, apply the warp, and visually verify the resulting images isolate the chessboard as a perfect square. Restart the app and verify the calibration loads from the JSON file correctly.",
+            "parentId": "undefined",
+            "updatedAt": "2026-03-29T09:54:46.059Z"
+          },
+          {
+            "id": 3,
+            "title": "64-Square Grid Division and Coordinate Mapping",
+            "description": "Subdivide the perspective-warped board image into 64 bounding boxes and map them to standard algebraic chess notation.",
+            "dependencies": [
+              2
+            ],
+            "details": "Write a grid generator that accepts the dimensions of the newly warped top-down image and mathematically subdivides it into an 8x8 matrix. Calculate `[x, y, w, h]` bounding boxes for each of the 64 squares. Implement logic to assign algebraic notation (A1-H8) to each box, taking into account configurable board orientation (e.g., white at bottom). Expose a debug overlay function to draw these calculated boundaries onto the output frame.",
+            "status": "done",
+            "testStrategy": "Feed a sample calibrated image through the grid generator. Use the debug overlay function to draw the bounding boxes and text labels (A1-H8) onto the image. Inspect the output to confirm each box aligns perfectly with the physical squares on the board.",
+            "parentId": "undefined",
+            "updatedAt": "2026-03-29T09:55:22.477Z"
+          }
+        ],
+        "updatedAt": "2026-03-29T09:55:22.477Z"
       },
       {
         "id": "3",
@@ -99,7 +138,8 @@
           "2"
         ],
         "status": "done",
-        "subtasks": []
+        "subtasks": [],
+        "updatedAt": "2026-03-29T10:02:12.933Z"
       },
       {
         "id": "4",
@@ -111,15 +151,16 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "in-progress",
+        "subtasks": [],
+        "updatedAt": "2026-03-29T10:02:13.621Z"
       },
       {
         "id": "5",
         "title": "Inter-Service Communication (RabbitMQ)",
         "description": "Establish the data flow from AVS to GLAS utilizing RabbitMQ.",
         "details": "In AVS, format the fused board state into a structured JSON string and use the `pika` library to publish to a RabbitMQ queue named `board_state_queue`. In GLAS, run an asyncio background task that consumes from `board_state_queue`. Write a difference engine to compare incoming physical states with the internal `python-chess` state to infer which move was just physically played.",
-        "testStrategy": "Mock AVS publisher with a script sending state changes to RabbitMQ. Verify GLAS logs confirm receipt of the state, correctly infer the move made (e.g., 'E2E4'), and update the `python-chess board.",
+        "testStrategy": "Mock AVS publisher with a script sending state changes to RabbitMQ. Verify GLAS logs confirm receipt of the state, correctly infer the move made (e.g., 'E2E4'), and update the `python-chess` board.",
         "priority": "high",
         "dependencies": [
           "3",
@@ -213,7 +254,7 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-29T10:24:34.714Z",
+      "lastModified": "2026-04-26T10:30:00.000Z",
       "taskCount": 11,
       "completedCount": 3,
       "tags": [

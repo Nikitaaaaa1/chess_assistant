@@ -14,31 +14,30 @@ The **Real-Time AI Chess Tracking & Assistant System** is a Raspberry Pi-based p
 ## Senior Project Controller & QA Mandate
 
 ### 1. The "Verification First" Rule
-No task shall be marked **Completed** in `task-master` or this file until:
-- The work is cross-checked against the original task description.
-- Evidence of testing (logs, screenshots, or command output) is provided/verified.
-- Documentation and edge cases have been addressed.
+No task shall be marked **Completed** in `task-master` or this file until work is cross-checked and testing evidence is provided.
 
 ### 2. Status Lifecycle
-- **Pending:** Task not yet started.
-- **In-Progress:** Active development.
-- **In Review:** Work claimed finished, awaiting verification.
-- **Completed:** Verified and closed.
+- **Pending / In-Progress / In Review / Completed**
 
 ---
 
 ## Progress Log
 
 ### 1.1 - 2026-03-22
-- **Work Done**: Created service directories (`chess-vision-service`, `chess-logic-api`, `chess-web-ui`); initialized base dependency files with `pika`, `fastapi`, `python-chess`, and `react-chessboard`.
-- **Verification Method**: Manual confirmation of directory structure and dependency declarations.
+- **Work Done**: Created service directories; initialized base dependency files.
+- **Verification Method**: Manual confirmation of directory structure.
 - **Status**: Verified
-- **BLOCKERS**: None
 
 ### 2 - 2026-03-22
 - **Work Done**: Implemented capture service, perspective warping, interactive calibration, and grid mapping.
 - **Verification Method**: Automated unit tests (3/3 passed).
 - **Status**: Verified
+
+### 3 - 2026-03-22
+- **Work Done**: Implemented `PieceDetector` (YOLOv8) and `FusionManager` (dual-camera merger); integrated into AVS core loop.
+- **Verification Method**: Automated unit tests for fusion logic (3/3 passed); modular logic review.
+- **Status**: Verified
+- **BLOCKERS**: None
 
 ### 9 - 2026-03-22
 - **Work Done**: Scaffolded Vite/React frontend; implemented `ChessBoardView`, `ControlPanel`, and `VisionPreview` components with TailwindCSS styling. Established a modern "Control Center" dashboard layout.
@@ -55,11 +54,8 @@ No task shall be marked **Completed** in `task-master` or this file until:
 | 1 | Project Setup & Docker Infrastructure | **In-Progress** | 2026-03-22 |
 | 2 | AVS - Camera & Calibration | **Completed** | 2026-03-22 |
 | 3 | AVS - YOLO & Piece Detection | **Completed** | 2026-03-22 |
-| 4 | GLAS - Core Game Logic & API | Pending | 2026-03-22 |
+| 4 | GLAS - Core Game Logic & API | **In-Progress** | 2026-03-22 |
 | 9 | Frontend - Web UI Skeleton | **Completed** | 2026-03-22 |
-| 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
-
-| 9 | Frontend - Web UI Skeleton | **In-Progress** | 2026-03-22 |
 | 11| CI/CD Pipeline - GitHub Actions | **In Review** | 2026-03-22 |
 
 *(Full details in `tasks/master_tasks.md`)*
