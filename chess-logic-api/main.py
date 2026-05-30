@@ -5,6 +5,9 @@ import logging
 import asyncio
 import json
 import chess
+import pika
+import os
+import threading
 from typing import List
 
 logging.basicConfig(level=logging.INFO)
@@ -16,20 +19,19 @@ class GameSession:
         self.board = chess.Board()
         self.connections: List[WebSocket] = []
         self.lock = asyncio.Lock()
+        self.last_physical_state = {}
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         async with self.lock:
             self.connections.append(websocket)
         logger.info(f"New client connected. Total clients: {len(self.connections)}")
-        # Send current state on connection
         await self.send_state(websocket)
 
     async def disconnect(self, websocket: WebSocket):
         async with self.lock:
             if websocket in self.connections:
                 self.connections.remove(websocket)
-        logger.info(f"Client disconnected. Total clients: {len(self.connections)}")
 
     async def send_state(self, websocket: WebSocket):
         payload = {
@@ -40,7 +42,7 @@ class GameSession:
         try:
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
-            logger.error(f"Error sending state to client: {e}")
+            logger.error(f"Error sending state: {e}")
 
     async def broadcast_state(self):
         payload = {
@@ -49,58 +51,84 @@ class GameSession:
             "turn": "white" if self.board.turn == chess.WHITE else "black"
         }
         message = json.dumps(payload)
-        
         async with self.lock:
             disconnected = []
             for connection in self.connections:
                 try:
                     await connection.send_text(message)
-                except Exception as e:
-                    logger.warning(f"Failed to send to a client, marking for removal: {e}")
+                except:
                     disconnected.append(connection)
-            
             for conn in disconnected:
                 if conn in self.connections:
                     self.connections.remove(conn)
 
+    def process_vision_update(self, fused_state):
+        """
+        Compares physical state from AVS with current virtual state.
+        Infers moves if possible.
+        """
+        # For now, to ensure UI updates during testing, we'll log the detection
+        # and try to find a move that matches the change.
+        if fused_state == self.last_physical_state:
+            return
+        
+        logger.info(f"Vision Update Received: {len(fused_state)} pieces detected.")
+        
+        # Simple move inference logic (Draft):
+        # 1. Identify which squares changed.
+        # 2. If a piece disappeared from A and appeared on B, it's a move A->B.
+        # This is a placeholder for a more robust difference engine.
+        
+        # For THIS mock-to-real transition, we will just SYNC the board if it's vastly different
+        # or if we are in "setup" mode.
+        # But per user request: "recognition based on mock data", we want to see the pieces.
+        
+        # Let's try to find a legal move that results in the state seen by vision.
+        # If no single move matches, we might need manual sync.
+        
+        self.last_physical_state = fused_state
+        # For testing purposes: Just log and broadcast current FEN
+        # (Real move inference will be Task 5.2)
+
 session = GameSession()
 
-# Mock Background Task to simulate moves for testing
-async def mock_game_loop():
-    logger.info("Starting mock game loop...")
-    while True: # Keep it running or repeatable
-        await asyncio.sleep(10) # Initial delay
-        
-        test_moves = ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]
-        session.board.reset()
-        await session.broadcast_state()
-        
-        for move_str in test_moves:
-            await asyncio.sleep(4)
-            try:
-                move = chess.Move.from_uci(move_str)
-                if move in session.board.legal_moves:
-                    session.board.push(move)
-                    logger.info(f"Mock Move: {move_str}")
-                    await session.broadcast_state()
-                else:
-                    logger.warning(f"Mock move {move_str} is illegal now.")
-            except Exception as e:
-                logger.error(f"Error in mock loop move: {e}")
-        
-        await asyncio.sleep(20) # Wait before restarting loop
+# RabbitMQ Consumer
+def start_rabbitmq_consumer(loop):
+    host = os.environ.get('RABBITMQ_HOST', 'rabbitmq-broker')
+    queue = 'board_state_queue'
+    
+    def callback(ch, method, properties, body):
+        try:
+            fused_state = json.loads(body)
+            # Use thread-safe way to call async method
+            asyncio.run_coroutine_threadsafe(handle_vision_update(fused_state), loop)
+        except Exception as e:
+            logger.error(f"Error in RabbitMQ callback: {e}")
+
+    while True:
+        try:
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
+            channel = connection.channel()
+            channel.queue_declare(queue=queue)
+            channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
+            logger.info(f"GLAS consuming from RabbitMQ at {host}")
+            channel.start_consuming()
+        except Exception as e:
+            logger.error(f"RabbitMQ connection failed, retrying in 5s: {e}")
+            time.sleep(5)
+
+async def handle_vision_update(fused_state):
+    session.process_vision_update(fused_state)
+    await session.broadcast_state()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    mock_task = asyncio.create_task(mock_game_loop())
+    loop = asyncio.get_running_loop()
+    consumer_thread = threading.Thread(target=start_rabbitmq_consumer, args=(loop,), daemon=True)
+    consumer_thread.start()
     yield
-    # Shutdown
-    mock_task.cancel()
-    try:
-        await mock_task
-    except asyncio.CancelledError:
-        pass
+    # Shutdown logic if any
 
 app = FastAPI(title="Chess Logic API (GLAS)", lifespan=lifespan)
 
@@ -125,10 +153,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await session.connect(websocket)
     try:
         while True:
-            # We mostly push from server, but need to keep socket alive
-            # Wait for data or ping
-            data = await websocket.receive_text()
-            logger.info(f"Received from client: {data}")
+            await websocket.receive_text()
     except WebSocketDisconnect:
         await session.disconnect(websocket)
     except Exception as e:
@@ -137,4 +162,5 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    import time
     uvicorn.run(app, host="0.0.0.0", port=8000)

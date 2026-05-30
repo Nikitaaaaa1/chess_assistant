@@ -6,12 +6,50 @@ import json
 import os
 import random
 import glob
+import pika
+import threading
+from flask import Flask, Response
 from grid import GridManager
 from detector import PieceDetector
 from fusion import FusionManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AVS")
+
+app = Flask(__name__)
+current_frame = None
+frame_lock = threading.Lock()
+
+class RabbitMQPublisher:
+    def __init__(self, host='rabbitmq-broker', queue='board_state_queue'):
+        self.host = host
+        self.queue = queue
+        self.connection = None
+        self.channel = None
+        self.connect()
+
+    def connect(self):
+        try:
+            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
+            self.channel = self.connection.channel()
+            self.channel.queue_declare(queue=self.queue)
+            logger.info(f"Connected to RabbitMQ at {self.host}")
+        except Exception as e:
+            logger.error(f"Failed to connect to RabbitMQ: {e}")
+
+    def publish(self, state):
+        if not self.channel:
+            self.connect()
+        if self.channel:
+            try:
+                self.channel.basic_publish(
+                    exchange='',
+                    routing_key=self.queue,
+                    body=json.dumps(state)
+                )
+            except Exception as e:
+                logger.error(f"Error publishing to RabbitMQ: {e}")
+                self.channel = None # Trigger reconnect
 
 class PerspectiveManager:
     def __init__(self, target_size=800):
@@ -29,7 +67,6 @@ class PerspectiveManager:
         return cv2.warpPerspective(frame, matrix, (self.target_size, self.target_size))
 
 class MultiCaptureService:
-    """Supports 1, 2, or 4 cameras/mock sources dynamically."""
     def __init__(self, sources=[0], use_mock=False):
         self.use_mock = use_mock
         self.sources = sources
@@ -45,10 +82,8 @@ class MultiCaptureService:
         logger.info(f"Initialized MultiCapture with {self.num_sources} sources (Mock: {use_mock}).")
 
     def setup_mock_sources(self, sources):
-        """Prepares files for mock mode."""
         for src in sources:
             if os.path.isdir(str(src)):
-                # If it's a directory, get all images/videos
                 files = []
                 for ext in ['*.jpg', '*.jpeg', '*.png', '*.mp4', '*.avi']:
                     files.extend(glob.glob(os.path.join(src, ext)))
@@ -56,12 +91,11 @@ class MultiCaptureService:
             else:
                 self.mock_files.append([src])
         
-        # Initialize VideoCaptures for video files to enable looping
         for file_list in self.mock_files:
             if file_list and (file_list[0].endswith('.mp4') or file_list[0].endswith('.avi')):
                 self.caps.append(cv2.VideoCapture(file_list[0]))
             else:
-                self.caps.append(None) # Placeholder for images
+                self.caps.append(None)
 
     def get_all_frames(self):
         frames = []
@@ -72,7 +106,6 @@ class MultiCaptureService:
                 ret, frame = self.caps[i].read()
                 if not ret:
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                    logger.warning(f"Source {i} failed to return frame.")
             frames.append(frame)
         return frames
 
@@ -80,55 +113,58 @@ class MultiCaptureService:
         file_list = self.mock_files[index]
         if not file_list:
             return np.zeros((480, 640, 3), dtype=np.uint8)
-
-        # If it's a video (already opened in self.caps)
         if self.caps[index] is not None:
             ret, frame = self.caps[index].read()
             if not ret:
-                # Loop video
                 self.caps[index].set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = self.caps[index].read()
             return frame if ret else np.zeros((480, 640, 3), dtype=np.uint8)
-        
-        # If it's an image or folder of images
         img_path = random.choice(file_list)
-        frame = cv2.imread(img_path)
-        if frame is None:
-            return np.zeros((480, 640, 3), dtype=np.uint8)
-        return frame
+        return cv2.imread(img_path)
 
     def release(self):
         for cap in self.caps:
             if cap: cap.release()
+
+@app.route('/stream')
+def video_feed():
+    def generate():
+        global current_frame
+        while True:
+            with frame_lock:
+                if current_frame is None:
+                    continue
+                (flag, encodedImage) = cv2.imencode(".jpg", current_frame)
+                if not flag:
+                    continue
+            yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
+            time.sleep(0.1)
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def load_calibration(path="calibration_config.json"):
     if os.path.exists(path):
         with open(path, 'r') as f: return json.load(f)
     return {}
 
-def main():
+def vision_loop():
+    global current_frame
     use_mock = os.environ.get("USE_MOCK_DATA", "false").lower() == "true"
     camera_env = os.environ.get("CAMERA_SOURCES", "0,1")
-    
-    if use_mock:
-        # If mock, and no sources defined, use the mock-data folder
-        if "CAMERA_SOURCES" not in os.environ:
-            sources = ["../mock-data"] # Relative to service dir if running from root
-        else:
-            sources = [s.strip() for s in camera_env.split(",")]
+    sources = [s.strip() for s in camera_env.split(",")]
+    if not use_mock:
+        sources = [int(s) if s.isdigit() else s for s in sources]
     else:
-        try:
-            sources = [int(s.strip()) if s.strip().isdigit() else s.strip() for s in camera_env.split(",")]
-        except:
-            sources = [0]
-    
-    logger.info(f"Starting AVS (Mock: {use_mock}) with sources: {sources}")
-    
+        # Default mock folder if relative to project root
+        if "CAMERA_SOURCES" not in os.environ:
+            sources = ["../mock-data"]
+
+    logger.info(f"Vision loop starting (Mock: {use_mock})")
     cap = MultiCaptureService(sources=sources, use_mock=use_mock)
     pm = PerspectiveManager(target_size=800)
     gm = GridManager(board_size=800)
     detector = PieceDetector()
     fusion = FusionManager()
+    publisher = RabbitMQPublisher(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq-broker'))
     
     default_corners = [(120, 40), (520, 40), (520, 440), (120, 440)]
     
@@ -138,28 +174,40 @@ def main():
             frames = cap.get_all_frames()
             
             all_detections = []
+            display_frame = None
+            
             for i, frame in enumerate(frames):
+                if frame is None or frame.size == 0: continue
                 cam_key = f"camera_{i}"
                 corners = config.get(cam_key, default_corners)
-                
-                # Check frame validity before warping
-                if frame is None or frame.size == 0:
-                    continue
-                    
                 warped = pm.warp_frame(frame, corners)
+                
+                # Show grid on the first camera for the stream
+                if i == 0:
+                    display_frame = warped.copy()
+                    gm.draw_grid(display_frame)
+                
                 detections = detector.detect_pieces(warped, gm)
                 all_detections.append(detections)
             
             if all_detections:
                 fused_state = fusion.fuse(all_detections)
-                logger.info(f"AVS Cycle Complete. Sources: {len(frames)}, Pieces: {len(fused_state)}")
+                publisher.publish(fused_state)
             
-            time.sleep(0.05)
+            if display_frame is not None:
+                with frame_lock:
+                    current_frame = display_frame
+
+            time.sleep(0.2) # Throttled for mock data polling
             
     except KeyboardInterrupt:
-        logger.info("Shutting down AVS...")
+        logger.info("Vision loop stopping...")
     finally:
         cap.release()
 
 if __name__ == "__main__":
-    main()
+    # Start vision loop in a thread
+    t = threading.Thread(target=vision_loop, daemon=True)
+    t.start()
+    # Start Flask server
+    app.run(host='0.0.0.0', port=8001, debug=False, threaded=True)
