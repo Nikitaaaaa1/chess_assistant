@@ -58,6 +58,7 @@ class RabbitMQPublisher:
                 routing_key=self.queue,
                 body=json.dumps(state)
             )
+            logger.info(f"Published board state to RabbitMQ: {len(state)} pieces.")
         except Exception as e:
             logger.error(f"Error publishing: {e}")
             self.channel = None
@@ -221,7 +222,6 @@ def vision_loop():
             
             for i, frame in enumerate(frames):
                 if frame is None or frame.size == 0: continue
-                raw_display_frames.append(cv2.resize(frame, (640, 480)))
                 
                 cam_key = f"camera_{i}"
                 corners = config.get(cam_key, default_corners)
@@ -230,6 +230,25 @@ def vision_loop():
                     warped = pm.warp_frame(frame, corners)
                     detections = detector.detect_pieces(warped, gm)
                     all_detections.append(detections)
+                    
+                    # Create a copy for raw display with overlays
+                    display_frame = frame.copy()
+                    
+                    # Map detections back to raw frame (approximate via inverse warp or just show on warped)
+                    # For simplicity and correctness, we will now stream the WARPED frame with overlays 
+                    # as it's much more informative for debugging.
+                    
+                    if i == 0:
+                        debug_frame = warped.copy()
+                        gm.draw_grid(debug_frame)
+                        for det in detections:
+                            (x, y, w, h) = gm.get_square_bounds(det['square'])
+                            cv2.putText(debug_frame, det['piece'], (x + 10, y + 40), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                        raw_display_frames.append(cv2.resize(debug_frame, (640, 480)))
+                    else:
+                        raw_display_frames.append(cv2.resize(frame, (640, 480)))
+
                 except Exception as e:
                     logger.error(f"Error source {i}: {e}")
             
@@ -239,18 +258,18 @@ def vision_loop():
             
             if raw_display_frames:
                 if len(raw_display_frames) == 1:
-                    display_frame = raw_display_frames[0]
+                    final_display = raw_display_frames[0]
                 elif len(raw_display_frames) == 2:
-                    display_frame = np.hstack(raw_display_frames)
+                    final_display = np.hstack(raw_display_frames)
                 else: # 4
                     while len(raw_display_frames) < 4:
                         raw_display_frames.append(np.zeros((480, 640, 3), dtype=np.uint8))
                     top = np.hstack(raw_display_frames[:2])
                     bottom = np.hstack(raw_display_frames[2:4])
-                    display_frame = np.vstack([top, bottom])
+                    final_display = np.vstack([top, bottom])
                 
                 with frame_lock:
-                    current_frame = display_frame
+                    current_frame = final_display
 
             time.sleep(0.5 if use_mock else 0.05)
             
