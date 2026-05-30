@@ -16,61 +16,63 @@ function App() {
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [isValid, setIsValid] = useState<boolean>(true);
   const [validationMsg, setValidationMsg] = useState<string>('');
+  
   const ws = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
-
     const connectWS = () => {
-      const wsUrl = 'ws://localhost:8000/ws/game';
-      logger.info(`Attempting connection to ${wsUrl}`);
-      
-      try {
-        const socket = new WebSocket(wsUrl);
-        
-        socket.onopen = () => {
-          logger.info("WebSocket: Connection established");
-          setIsOnline(true);
-          setApiStatus('ALL SERVICES OPERATIONAL');
-        };
-
-        socket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'GAME_STATE') {
-              setFen(data.fen);
-              setIsValid(data.is_valid);
-              setValidationMsg(data.validation_msg);
-            }
-          } catch (err) {
-            logger.error(`Failed to parse message: ${err}`);
-          }
-        };
-
-        socket.onclose = (event) => {
-          logger.info(`WebSocket: Connection closed (${event.code})`);
-          setIsOnline(false);
-          setApiStatus('SYSTEM OFFLINE');
-          reconnectTimeout = setTimeout(connectWS, 3000);
-        };
-
-        socket.onerror = (err) => {
-          logger.error("WebSocket: Error detected");
-        };
-
-        ws.current = socket;
-      } catch (e) {
-        logger.error(`WebSocket: Setup failed: ${e}`);
-        reconnectTimeout = setTimeout(connectWS, 5000);
+      // Avoid multiple connections
+      if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
+        return;
       }
+
+      const wsUrl = 'ws://localhost:8000/ws/game';
+      logger.info(`WebSocket: Connecting to ${wsUrl}`);
+      
+      const socket = new WebSocket(wsUrl);
+      
+      socket.onopen = () => {
+        logger.info("WebSocket: Connection established");
+        setIsOnline(true);
+        setApiStatus('ALL SERVICES OPERATIONAL');
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'GAME_STATE') {
+            logger.debug(`[SYNC] New FEN received: ${data.fen}`);
+            setFen(data.fen);
+            setIsValid(data.is_valid);
+            setValidationMsg(data.validation_msg);
+          }
+        } catch (err) {
+          logger.error(`WebSocket: Message parse error: ${err}`);
+        }
+      };
+
+      socket.onclose = (event) => {
+        logger.info(`WebSocket: Connection closed (${event.code})`);
+        setIsOnline(false);
+        setApiStatus('SYSTEM OFFLINE');
+        if (reconnectRef.current) clearTimeout(reconnectRef.current);
+        reconnectRef.current = setTimeout(connectWS, 3000);
+      };
+
+      socket.onerror = () => {
+        logger.error("WebSocket: Error occurred");
+      };
+
+      ws.current = socket;
     };
 
     connectWS();
 
     return () => {
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (ws.current) {
-        ws.current.onclose = null;
+        ws.current.onclose = null; // Prevent reconnect on cleanup
         ws.current.close();
       }
     };
@@ -83,12 +85,13 @@ function App() {
         {/* Left Column: Virtual Board (Span 7) */}
         <section className="lg:col-span-7 flex flex-col items-center">
           <div className="w-full flex justify-center relative">
+            {/* FORCE RE-RENDER on FEN change using key */}
             <ChessBoardView 
+              key={fen}
               fen={fen} 
-              onMove={(move) => logger.info(`User attempted move: ${move}`)} 
+              onMove={(move) => logger.info(`User move: ${move}`)} 
             />
             
-            {/* Minimalist Warning for Incomplete Board */}
             {!isValid && (
                 <div className="absolute top-4 right-4 z-50">
                     <div className="bg-amber-500/90 text-slate-950 px-3 py-1.5 rounded-lg font-bold flex items-center gap-2 text-[10px] uppercase tracking-tighter shadow-2xl backdrop-blur-md border border-amber-400">
@@ -111,6 +114,9 @@ function App() {
                 <span className={`w-2 h-2 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'} rounded-full`}></span>
                 {apiStatus}
                 </span>
+            </div>
+            <div className="hidden lg:block text-[8px] font-mono text-slate-600 max-w-[240px] truncate bg-black/20 p-2 rounded">
+                CURRENT FEN: {fen}
             </div>
           </div>
         </aside>
