@@ -26,8 +26,6 @@ class GameSession:
         self.last_physical_state = {}
 
     async def connect(self, websocket: WebSocket):
-        # The endpoint should call accept() before calling this connect()
-        # but to be safe and avoid "not accepted" errors, we do it carefully.
         async with self.lock:
             self.connections.append(websocket)
         logger.info(f"UI client registered. Total: {len(self.connections)}")
@@ -40,22 +38,36 @@ class GameSession:
         logger.info(f"UI client disconnected. Total: {len(self.connections)}")
 
     async def send_state(self, websocket: WebSocket):
+        # We send both actual FEN and a "rendering-safe" version if needed
+        is_valid, validation_msg = self.validate_board_for_game()
+        
         payload = {
             "type": "GAME_STATE",
             "fen": self.board.fen(),
-            "turn": "white" if self.board.turn == chess.WHITE else "black"
+            "turn": "white" if self.board.turn == chess.WHITE else "black",
+            "is_valid": is_valid,
+            "validation_msg": validation_msg
         }
         try:
-            # Check if socket is open before sending
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
             logger.error(f"Failed to send state: {e}")
 
+    def validate_board_for_game(self):
+        """Checks if the board is valid for a real game (e.g. has kings)."""
+        fen = self.board.fen()
+        if 'K' not in fen: return False, "Missing White King"
+        if 'k' not in fen: return False, "Missing Black King"
+        return True, "Valid"
+
     async def broadcast_state(self):
+        is_valid, validation_msg = self.validate_board_for_game()
         payload = {
             "type": "GAME_STATE",
             "fen": self.board.fen(),
-            "turn": "white" if self.board.turn == chess.WHITE else "black"
+            "turn": "white" if self.board.turn == chess.WHITE else "black",
+            "is_valid": is_valid,
+            "validation_msg": validation_msg
         }
         message = json.dumps(payload)
         async with self.lock:
@@ -63,21 +75,25 @@ class GameSession:
             for connection in self.connections:
                 try:
                     await connection.send_text(message)
-                except Exception as e:
-                    logger.debug(f"Broadcast failure to a client: {e}")
+                except:
                     disconnected.append(connection)
             for conn in disconnected:
                 if conn in self.connections:
                     self.connections.remove(conn)
 
     def process_vision_update(self, fused_state):
+        """
+        Updates the virtual board state based on AVS detections.
+        Allows for incomplete boards (missing kings) by using Board(None).
+        """
         if fused_state == self.last_physical_state:
-            return
+            return True
         
-        logger.info(f"Processing Vision Update: {len(fused_state)} pieces.")
+        logger.info(f"Processing Vision Update: {len(fused_state)} pieces detected.")
         
-        # Hard Sync logic: Rebuild board from detection results.
+        # We start with an empty board to reflect exactly what vision sees
         new_board = chess.Board(None) 
+        
         piece_map = {
             "wP": chess.PAWN, "wN": chess.KNIGHT, "wB": chess.BISHOP, 
             "wR": chess.ROOK, "wQ": chess.QUEEN, "wK": chess.KING,
@@ -95,22 +111,9 @@ class GameSession:
             except Exception as e:
                 logger.warning(f"Failed to set piece {piece_label} at {square_name}: {e}")
 
+        # In 'Sync/Vision' mode, we accept the board even if it's incomplete
         self.board = new_board
         self.last_physical_state = fused_state
-        
-        # Validate FEN: missing kings will crash the frontend
-        try:
-            current_fen = self.board.fen()
-            # Basic check: at least one white and one black king must exist for chess.js
-            if 'K' in current_fen and 'k' in current_fen:
-                logger.info(f"Board synced. New FEN: {current_fen}")
-            else:
-                logger.warning(f"Vision update resulted in invalid board (missing kings): {current_fen}. Skipping broadcast.")
-                return False
-        except Exception as e:
-            logger.error(f"Error generating FEN from vision: {e}")
-            return False
-            
         return True
 
 session = GameSession()
@@ -123,7 +126,6 @@ def start_rabbitmq_consumer(loop):
     while True:
         try:
             logger.info(f"Connecting to RabbitMQ at {host}...")
-            # Use a longer connection timeout
             connection = pika.BlockingConnection(pika.ConnectionParameters(
                 host=host, 
                 heartbeat=600,
@@ -153,7 +155,6 @@ async def handle_vision_update(fused_state):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     loop = asyncio.get_running_loop()
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, args=(loop,), daemon=True)
     consumer_thread.start()
@@ -179,11 +180,10 @@ async def health():
 
 @app.websocket("/ws/game")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept() # Accept MUST be first
+    await websocket.accept()
     await session.connect(websocket)
     try:
         while True:
-            # Wait for any data (keepalive)
             await websocket.receive_text()
     except WebSocketDisconnect:
         await session.disconnect(websocket)

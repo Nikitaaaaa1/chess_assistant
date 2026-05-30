@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChessBoardView } from './components/ChessBoardView';
 import { VisionPreview } from './components/VisionPreview';
+import { AlertCircle } from 'lucide-react';
 
 // Simple logger mock
 const logger = {
@@ -13,6 +14,8 @@ function App() {
   const [fen, setFen] = useState("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   const [apiStatus, setApiStatus] = useState<string>('Connecting...');
   const [isOnline, setIsOnline] = useState<boolean>(false);
+  const [isValid, setIsValid] = useState<boolean>(true);
+  const [validationMsg, setValidationMsg] = useState<string>('');
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -34,10 +37,10 @@ function App() {
         socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            logger.debug(`WebSocket message received: ${data.type}`);
             if (data.type === 'GAME_STATE') {
-              logger.info(`Updating board state: ${data.fen}`);
               setFen(data.fen);
+              setIsValid(data.is_valid);
+              setValidationMsg(data.validation_msg);
             }
           } catch (err) {
             logger.error(`Failed to parse message: ${err}`);
@@ -79,12 +82,22 @@ function App() {
       <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         
         {/* Left Column: Virtual Board (Span 7) */}
-        <section className="lg:col-span-7 flex justify-center">
-          <div className="w-full flex flex-col items-center">
+        <section className="lg:col-span-7 flex flex-col items-center gap-6">
+          <div className="relative group">
             <ChessBoardView 
               fen={fen} 
               onMove={(move) => logger.info(`User attempted move: ${move}`)} 
             />
+            
+            {/* Warning Overlay for Incomplete Board */}
+            {!isValid && (
+                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none rounded-lg border-2 border-amber-500/50">
+                    <div className="bg-amber-500 text-slate-950 px-4 py-2 rounded-full font-black flex items-center gap-2 text-xs uppercase tracking-tighter shadow-xl animate-bounce">
+                        <AlertCircle size={16} />
+                        {validationMsg}
+                    </div>
+                </div>
+            )}
           </div>
         </section>
 
@@ -92,7 +105,6 @@ function App() {
         <aside className="lg:col-span-5 flex flex-col gap-8 h-full justify-center">
           <VisionPreview />
           
-          {/* Connection Status moved here from header/footer */}
           <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex items-center justify-between">
             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">System Connection</div>
             <div className={`text-sm font-mono ${isOnline ? 'text-emerald-500' : 'text-red-500'} flex items-center gap-2`}>
