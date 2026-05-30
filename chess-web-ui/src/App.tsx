@@ -4,6 +4,12 @@ import { ControlPanel } from './components/ControlPanel';
 import { VisionPreview } from './components/VisionPreview';
 import { Cpu, Github } from 'lucide-react';
 
+// Simple logger mock
+const logger = {
+  info: (msg: string) => console.log(`[INFO] ${msg}`),
+  error: (msg: string) => console.error(`[ERROR] ${msg}`)
+};
+
 function App() {
   const [fen, setFen] = useState("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   const [apiStatus, setApiStatus] = useState<string>('Connecting...');
@@ -11,36 +17,59 @@ function App() {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+
     const connectWS = () => {
-      const socket = new WebSocket('ws://localhost:8000/ws/game');
+      logger.info("Attempting to connect to WebSocket: ws://localhost:8000/ws/game");
       
-      socket.onopen = () => {
-        logger.info("WebSocket connected");
-        setIsOnline(true);
-        setApiStatus('ALL SERVICES OPERATIONAL');
-      };
+      try {
+        const socket = new WebSocket('ws://localhost:8000/ws/game');
+        
+        socket.onopen = () => {
+          logger.info("WebSocket connected successfully");
+          setIsOnline(true);
+          setApiStatus('ALL SERVICES OPERATIONAL');
+        };
 
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'GAME_STATE') {
-          setFen(data.fen);
-        }
-      };
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'GAME_STATE') {
+              setFen(data.fen);
+            }
+          } catch (err) {
+            logger.error(`Failed to parse message: ${err}`);
+          }
+        };
 
-      socket.onclose = () => {
-        setIsOnline(false);
-        setApiStatus('SYSTEM OFFLINE');
-        // Try to reconnect after 3 seconds
-        setTimeout(connectWS, 3000);
-      };
+        socket.onclose = (event) => {
+          logger.info(`WebSocket closed: ${event.code} ${event.reason}`);
+          setIsOnline(false);
+          setApiStatus('SYSTEM OFFLINE');
+          // Reconnect logic
+          reconnectTimeout = setTimeout(connectWS, 3000);
+        };
 
-      ws.current = socket;
+        socket.onerror = (err) => {
+          logger.error("WebSocket encountered an error");
+          // socket.close() will be called automatically in most browsers, triggering onclose
+        };
+
+        ws.current = socket;
+      } catch (e) {
+        logger.error(`Connection attempt failed: ${e}`);
+        reconnectTimeout = setTimeout(connectWS, 5000);
+      }
     };
 
     connectWS();
 
     return () => {
-      ws.current?.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws.current) {
+        ws.current.onclose = null; // Prevent reconnect on intentional unmount
+        ws.current.close();
+      }
     };
   }, []);
 
@@ -108,11 +137,5 @@ function App() {
     </div>
   )
 }
-
-// Simple logger mock since we don't have a global logger on frontend yet
-const logger = {
-  info: (msg: string) => console.log(`[INFO] ${msg}`),
-  error: (msg: string) => console.error(`[ERROR] ${msg}`)
-};
 
 export default App
