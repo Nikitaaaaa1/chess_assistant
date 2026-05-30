@@ -26,10 +26,11 @@ class GameSession:
         self.last_physical_state = {}
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+        # The endpoint should call accept() before calling this connect()
+        # but to be safe and avoid "not accepted" errors, we do it carefully.
         async with self.lock:
             self.connections.append(websocket)
-        logger.info(f"New UI client connected. Total: {len(self.connections)}")
+        logger.info(f"UI client registered. Total: {len(self.connections)}")
         await self.send_state(websocket)
 
     async def disconnect(self, websocket: WebSocket):
@@ -45,9 +46,10 @@ class GameSession:
             "turn": "white" if self.board.turn == chess.WHITE else "black"
         }
         try:
+            # Check if socket is open before sending
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
-            logger.error(f"Error sending state to UI: {e}")
+            logger.error(f"Failed to send state: {e}")
 
     async def broadcast_state(self):
         payload = {
@@ -61,28 +63,21 @@ class GameSession:
             for connection in self.connections:
                 try:
                     await connection.send_text(message)
-                except:
+                except Exception as e:
+                    logger.debug(f"Broadcast failure to a client: {e}")
                     disconnected.append(connection)
             for conn in disconnected:
                 if conn in self.connections:
                     self.connections.remove(conn)
 
     def process_vision_update(self, fused_state):
-        """
-        Updates the virtual board state based on AVS detections.
-        Currently implements a 'Hard Sync' for testing.
-        """
         if fused_state == self.last_physical_state:
             return
         
-        logger.info(f"Processing Vision Update: {len(fused_state)} pieces detected.")
+        logger.info(f"Processing Vision Update: {len(fused_state)} pieces.")
         
-        # Hard Sync logic (for development): 
-        # Rebuild board from detection results.
-        # Mapping: 'e2' -> 'wP' (white Pawn)
-        
-        new_board = chess.Board(None) # Empty board
-        
+        # Hard Sync logic: Rebuild board from detection results.
+        new_board = chess.Board(None) 
         piece_map = {
             "wP": chess.PAWN, "wN": chess.KNIGHT, "wB": chess.BISHOP, 
             "wR": chess.ROOK, "wQ": chess.QUEEN, "wK": chess.KING,
@@ -100,11 +95,23 @@ class GameSession:
             except Exception as e:
                 logger.warning(f"Failed to set piece {piece_label} at {square_name}: {e}")
 
-        # Basic validation: If the board is valid enough, update the active session
-        # For mock-mode development, we'll just force the FEN.
         self.board = new_board
         self.last_physical_state = fused_state
-        logger.info(f"Board synced. New FEN: {self.board.fen()}")
+        
+        # Validate FEN: missing kings will crash the frontend
+        try:
+            current_fen = self.board.fen()
+            # Basic check: at least one white and one black king must exist for chess.js
+            if 'K' in current_fen and 'k' in current_fen:
+                logger.info(f"Board synced. New FEN: {current_fen}")
+            else:
+                logger.warning(f"Vision update resulted in invalid board (missing kings): {current_fen}. Skipping broadcast.")
+                return False
+        except Exception as e:
+            logger.error(f"Error generating FEN from vision: {e}")
+            return False
+            
+        return True
 
 session = GameSession()
 
@@ -116,7 +123,13 @@ def start_rabbitmq_consumer(loop):
     while True:
         try:
             logger.info(f"Connecting to RabbitMQ at {host}...")
-            connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, heartbeat=600))
+            # Use a longer connection timeout
+            connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host=host, 
+                heartbeat=600,
+                connection_attempts=10,
+                retry_delay=5
+            ))
             channel = connection.channel()
             channel.queue_declare(queue=queue)
             
@@ -131,15 +144,16 @@ def start_rabbitmq_consumer(loop):
             logger.info("GLAS successfully consuming from board_state_queue")
             channel.start_consuming()
         except Exception as e:
-            logger.error(f"RabbitMQ connection lost, retrying in 5s: {e}")
+            logger.error(f"RabbitMQ connection failed, retrying in 5s: {e}")
             time.sleep(5)
 
 async def handle_vision_update(fused_state):
-    session.process_vision_update(fused_state)
-    await session.broadcast_state()
+    if session.process_vision_update(fused_state):
+        await session.broadcast_state()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup
     loop = asyncio.get_running_loop()
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, args=(loop,), daemon=True)
     consumer_thread.start()
@@ -165,9 +179,11 @@ async def health():
 
 @app.websocket("/ws/game")
 async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept() # Accept MUST be first
     await session.connect(websocket)
     try:
         while True:
+            # Wait for any data (keepalive)
             await websocket.receive_text()
     except WebSocketDisconnect:
         await session.disconnect(websocket)

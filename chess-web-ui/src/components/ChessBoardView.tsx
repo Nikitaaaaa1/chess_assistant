@@ -13,10 +13,15 @@ export const ChessBoardView = ({ fen, onMove }: ChessBoardViewProps) => {
   // Update local game state when external FEN prop changes
   useEffect(() => {
     try {
-      const newGame = new Chess(fen);
-      setGame(newGame);
+      // Validate FEN before setting state
+      const validation = new Chess().load(fen);
+      if (validation) {
+        setGame(new Chess(fen));
+      } else {
+        console.warn("Skipping invalid FEN sync:", fen);
+      }
     } catch (e) {
-      console.error("Invalid FEN received:", fen);
+      console.error("Critical FEN error:", e);
     }
   }, [fen]);
 
