@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { ChessBoardView } from './components/ChessBoardView';
 import { ControlPanel } from './components/ControlPanel';
 import { VisionPreview } from './components/VisionPreview';
@@ -5,6 +6,27 @@ import { Cpu, Github } from 'lucide-react';
 
 function App() {
   const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const [apiStatus, setApiStatus] = useState<string>('Connecting...');
+  const [isOnline, setIsOnline] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkHealth = () => {
+      fetch('http://localhost:8000/health')
+        .then(res => res.json())
+        .then(data => {
+          setApiStatus(data.status === 'healthy' ? 'ALL SERVICES OPERATIONAL' : 'SYSTEM DEGRADED');
+          setIsOnline(data.status === 'healthy');
+        })
+        .catch(() => {
+          setApiStatus('SYSTEM OFFLINE');
+          setIsOnline(false);
+        });
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="min-h-screen w-screen bg-slate-950 flex flex-col items-center p-4 lg:p-8">
@@ -26,9 +48,9 @@ function App() {
           </a>
           <div className="text-right hidden md:block">
             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">System Status</div>
-            <div className="text-sm font-mono text-emerald-500 flex items-center justify-end gap-2">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              ALL SERVICES OPERATIONAL
+            <div className={`text-sm font-mono ${isOnline ? 'text-emerald-500' : 'text-red-500'} flex items-center justify-end gap-2`}>
+              <span className={`w-2 h-2 ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'} rounded-full`}></span>
+              {apiStatus}
             </div>
           </div>
         </div>
