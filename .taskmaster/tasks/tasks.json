@@ -9,7 +9,7 @@
         "testStrategy": "Run `docker-compose up --build`. Verify that all four containers start without crashing and can ping each other over the internal Docker network. Access RabbitMQ Management UI at localhost:15672.",
         "priority": "high",
         "dependencies": [],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -30,9 +30,10 @@
               1
             ],
             "details": "Create a `Dockerfile` in the `chess-vision-service/` directory. Use `python:3.11-slim` as the base image. Install essential system dependencies required for OpenCV such as `libgl1-mesa-glx` and `libglib2.0-0`. Copy the `requirements.txt`, run `pip install -r requirements.txt`, and copy a placeholder `main.py` that contains an infinite loop or basic logging to keep the container alive.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run `docker build -t chess-vision-service ./chess-vision-service` and ensure the image builds successfully without dependency or OS package errors.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-05-30T19:03:18.324Z"
           },
           {
             "id": 3,
@@ -42,9 +43,10 @@
               1
             ],
             "details": "Create a `Dockerfile` in the `chess-logic-api/` directory. Use the `python:3.11-slim` base image. Set the working directory, copy `requirements.txt`, and run `pip install -r requirements.txt`. Copy a placeholder `main.py` with a basic FastAPI app instance. Expose port 8000 and set the CMD to `uvicorn main:app --host 0.0.0.0 --port 8000`.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run `docker build -t chess-logic-api ./chess-logic-api` and ensure the image builds successfully.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-05-30T19:03:18.333Z"
           },
           {
             "id": 4,
@@ -54,9 +56,10 @@
               1
             ],
             "details": "Create a `Dockerfile` in the `chess-web-ui/` directory. Use `node:18-alpine` as the base image to keep it lightweight. Set the working directory to `/app`, copy `package.json` and lock files, and run `npm install`. Copy the rest of the source code, expose port 3000 (or the default Vite port), and set the startup command (e.g., `npm start` or `npm run dev`).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run `docker build -t chess-web-ui ./chess-web-ui` and verify the Node.js environment compiles the image properly.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-05-30T19:03:18.335Z"
           },
           {
             "id": 5,
@@ -68,12 +71,13 @@
               4
             ],
             "details": "Create `docker-compose.yml` at the project root. Define 4 services: `chess-vision-service`, `chess-logic-api` (mapped to port 8000), `chess-web-ui` (mapped to port 3000), and `rabbitmq-broker` (using image `rabbitmq:3-management-alpine`, mapped to ports 5672 and 15672). Define a custom Docker bridge network named `chess-net` and attach all four services to this network to ensure they can resolve each other by container name.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run `docker-compose up --build -d`. Verify all containers are 'Up'. Execute `docker exec -it <chess-logic-api-container> ping rabbitmq-broker` to test internal DNS resolution and network connectivity.",
-            "parentId": "undefined"
+            "parentId": "undefined",
+            "updatedAt": "2026-05-30T19:03:18.336Z"
           }
         ],
-        "updatedAt": "2026-03-22T14:20:06.017Z"
+        "updatedAt": "2026-05-30T19:03:18.336Z"
       },
       {
         "id": "2",
@@ -151,9 +155,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-03-29T10:02:13.621Z"
+        "updatedAt": "2026-05-30T19:03:18.338Z"
       },
       {
         "id": "5",
@@ -207,8 +211,9 @@
           "4",
           "7"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-05-30T19:03:18.340Z"
       },
       {
         "id": "9",
@@ -254,9 +259,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-04-26T10:30:00.000Z",
+      "lastModified": "2026-05-30T19:03:18.340Z",
       "taskCount": 11,
-      "completedCount": 3,
+      "completedCount": 6,
       "tags": [
         "master"
       ]
