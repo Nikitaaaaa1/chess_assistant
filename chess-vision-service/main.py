@@ -42,7 +42,7 @@ class RabbitMQPublisher:
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(
                     host=self.host, 
                     heartbeat=600,
-                    connection_attempts=10,
+                    connection_attempts=20,
                     retry_delay=5
                 ))
                 self.channel = self.connection.channel()
@@ -62,6 +62,8 @@ class RabbitMQPublisher:
                 routing_key=self.queue,
                 body=json.dumps(state)
             )
+            # Log successful publish with piece count
+            logger.info(f"Published state to RabbitMQ: {len(state)} pieces.")
         except Exception as e:
             logger.error(f"Error publishing: {e}")
             self.channel = None
@@ -82,30 +84,24 @@ class PerspectiveManager:
         return cv2.warpPerspective(frame, matrix, (self.target_size, self.target_size))
 
     def auto_detect_corners(self, frame):
-        """Attempts to find 4 corners of a chessboard using contour detection."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-        
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         best_cnt = None
         max_area = 0
-        
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < (frame.shape[0] * frame.shape[1] * 0.1): continue # Too small
-            
+            if area < (frame.shape[0] * frame.shape[1] * 0.1): continue
             peri = cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-            
-            if len(approx) == 4: # Square-ish
+            if len(approx) == 4:
                 if area > max_area:
                     max_area = area
                     best_cnt = approx
         
         if best_cnt is not None:
-            # Reorder points: TL, TR, BR, BL
             pts = best_cnt.reshape(4, 2)
             rect = np.zeros((4, 2), dtype="float32")
             s = pts.sum(axis=1)
@@ -115,7 +111,6 @@ class PerspectiveManager:
             rect[1] = pts[np.argmin(diff)]
             rect[3] = pts[np.argmax(diff)]
             return rect.tolist()
-            
         return None
 
 class MultiCaptureService:
@@ -124,6 +119,7 @@ class MultiCaptureService:
         self.sources = sources
         self.caps = []
         self.mock_files = []
+        self.current_mock_idx = [] # Index of chosen file for each source
         self.last_rescan = 0
         
         if use_mock:
@@ -141,25 +137,29 @@ class MultiCaptureService:
                 files = []
                 for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG', '*.mp4', '*.avi']:
                     found = glob.glob(os.path.join(src_str, ext))
-                    files.extend(found)
-                files = [f for f in files if os.path.isfile(f)]
+                    files.extend([f for f in found if os.path.isfile(f)])
                 new_mock_files.append(sorted(list(set(files))))
             else:
                 if os.path.isfile(src_str):
                     new_mock_files.append([src_str])
         
+        self.mock_files = new_mock_files
+        # Initialize sticky indices
+        self.current_mock_idx = [random.randint(0, len(f)-1) if f else 0 for f in self.mock_files]
+        
         if not self.caps and new_mock_files:
-            for file_list in new_mock_files:
+            for i, file_list in enumerate(new_mock_files):
                 if file_list and (file_list[0].lower().endswith(('.mp4', '.avi'))):
                     self.caps.append(cv2.VideoCapture(file_list[0]))
                 else:
                     self.caps.append(None)
         
-        self.mock_files = new_mock_files
         self.last_rescan = time.time()
+        logger.info(f"Mock Discovery: Found {sum(len(f) for f in self.mock_files)} images/videos.")
 
     def get_all_frames(self):
-        if self.use_mock and (time.time() - self.last_rescan > 10):
+        # Every 15 seconds, change the sticky mock image to simulate a move
+        if self.use_mock and (time.time() - self.last_rescan > 15):
             self.rescan_mock_sources()
 
         frames = []
@@ -189,8 +189,11 @@ class MultiCaptureService:
                 ret, frame = self.caps[index].read()
             return frame
         
-        img_path = random.choice(file_list)
-        return cv2.imread(img_path)
+        # Use sticky index
+        idx = self.current_mock_idx[index] % len(file_list)
+        img_path = file_list[idx]
+        frame = cv2.imread(img_path)
+        return frame
 
     def release(self):
         for cap in self.caps:
@@ -236,7 +239,7 @@ def vision_loop():
     if not use_mock:
         sources = [int(s) if s.isdigit() else s for s in sources]
 
-    logger.info(f"Vision loop starting (AutoCalib: {auto_calib_interval}s). Sources: {sources}")
+    logger.info(f"Vision loop starting. Sources: {sources}, Mock: {use_mock}")
     cap = MultiCaptureService(sources=sources, use_mock=use_mock)
     pm = PerspectiveManager(target_size=800)
     gm = GridManager(board_size=800)
@@ -255,7 +258,6 @@ def vision_loop():
             all_detections = []
             raw_display_frames = []
             
-            # Check for auto-calibration
             do_auto_calib = (time.time() - last_auto_calib > auto_calib_interval)
             
             for i, frame in enumerate(frames):
@@ -264,7 +266,6 @@ def vision_loop():
                 cam_key = f"camera_{i}"
                 corners = config.get(cam_key)
                 
-                # Auto-calibration trigger
                 if do_auto_calib:
                     new_corners = pm.auto_detect_corners(frame)
                     if new_corners:
