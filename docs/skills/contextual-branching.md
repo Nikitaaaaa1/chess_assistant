@@ -16,6 +16,7 @@ When such a request is detected, the agent MUST:
 - Acknowledge the request.
 - Point out that it belongs to a different task or is out of the current sequence.
 - **Propose creating a new feature branch** to keep the work isolated.
+- **IMPORTANT**: Always use the **`develop`** branch as the base for new branches.
 
 ### 3. Branch Naming Convention
 Follow [Conventional Branch](https://conventional-branch.github.io/) standards:
