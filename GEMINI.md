@@ -55,9 +55,9 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 - **Status**: Verified
 
 ### 5 - 2026-05-30
-- **Work Done**: Established real-time data flow between AVS and GLAS using RabbitMQ. Implemented MJPEG streaming in AVS for frontend visual feedback.
-- **Verification Method**: Manual verification of MJPEG stream in UI and state updates via RabbitMQ logs.
-- **Status**: In-Progress
+- **Work Done**: Established real-time data flow between AVS and GLAS using RabbitMQ. Implemented MJPEG streaming in AVS. Developed the **Difference Engine** in GLAS with noise filtering (stability threshold) and automatic move inference for simple moves/captures.
+- **Verification Method**: Manual verification of state transitions via mock data and console logs.
+- **Status**: In Review
 
 ### 9 - 2026-03-22
 - **Work Done**: Scaffolded Vite/React frontend; implemented `ChessBoardView`, `ControlPanel`, and `VisionPreview` components with TailwindCSS styling. Established a modern "Control Center" dashboard layout.
