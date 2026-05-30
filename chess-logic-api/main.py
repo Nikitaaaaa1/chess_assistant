@@ -8,9 +8,13 @@ import chess
 import pika
 import os
 import threading
+import time
 from typing import List
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger("GLAS")
 
 # Game State Manager
@@ -25,13 +29,14 @@ class GameSession:
         await websocket.accept()
         async with self.lock:
             self.connections.append(websocket)
-        logger.info(f"New client connected. Total clients: {len(self.connections)}")
+        logger.info(f"New UI client connected. Total: {len(self.connections)}")
         await self.send_state(websocket)
 
     async def disconnect(self, websocket: WebSocket):
         async with self.lock:
             if websocket in self.connections:
                 self.connections.remove(websocket)
+        logger.info(f"UI client disconnected. Total: {len(self.connections)}")
 
     async def send_state(self, websocket: WebSocket):
         payload = {
@@ -42,7 +47,7 @@ class GameSession:
         try:
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
-            logger.error(f"Error sending state: {e}")
+            logger.error(f"Error sending state to UI: {e}")
 
     async def broadcast_state(self):
         payload = {
@@ -64,31 +69,42 @@ class GameSession:
 
     def process_vision_update(self, fused_state):
         """
-        Compares physical state from AVS with current virtual state.
-        Infers moves if possible.
+        Updates the virtual board state based on AVS detections.
+        Currently implements a 'Hard Sync' for testing.
         """
-        # For now, to ensure UI updates during testing, we'll log the detection
-        # and try to find a move that matches the change.
         if fused_state == self.last_physical_state:
             return
         
-        logger.info(f"Vision Update Received: {len(fused_state)} pieces detected.")
+        logger.info(f"Processing Vision Update: {len(fused_state)} pieces detected.")
         
-        # Simple move inference logic (Draft):
-        # 1. Identify which squares changed.
-        # 2. If a piece disappeared from A and appeared on B, it's a move A->B.
-        # This is a placeholder for a more robust difference engine.
+        # Hard Sync logic (for development): 
+        # Rebuild board from detection results.
+        # Mapping: 'e2' -> 'wP' (white Pawn)
         
-        # For THIS mock-to-real transition, we will just SYNC the board if it's vastly different
-        # or if we are in "setup" mode.
-        # But per user request: "recognition based on mock data", we want to see the pieces.
+        new_board = chess.Board(None) # Empty board
         
-        # Let's try to find a legal move that results in the state seen by vision.
-        # If no single move matches, we might need manual sync.
+        piece_map = {
+            "wP": chess.PAWN, "wN": chess.KNIGHT, "wB": chess.BISHOP, 
+            "wR": chess.ROOK, "wQ": chess.QUEEN, "wK": chess.KING,
+            "bP": chess.PAWN, "bN": chess.KNIGHT, "bB": chess.BISHOP, 
+            "bR": chess.ROOK, "bQ": chess.QUEEN, "bK": chess.KING
+        }
         
+        for square_name, piece_label in fused_state.items():
+            try:
+                square_index = chess.parse_square(square_name)
+                color = chess.WHITE if piece_label.startswith('w') else chess.BLACK
+                piece_type = piece_map.get(piece_label)
+                if piece_type:
+                    new_board.set_piece_at(square_index, chess.Piece(piece_type, color))
+            except Exception as e:
+                logger.warning(f"Failed to set piece {piece_label} at {square_name}: {e}")
+
+        # Basic validation: If the board is valid enough, update the active session
+        # For mock-mode development, we'll just force the FEN.
+        self.board = new_board
         self.last_physical_state = fused_state
-        # For testing purposes: Just log and broadcast current FEN
-        # (Real move inference will be Task 5.2)
+        logger.info(f"Board synced. New FEN: {self.board.fen()}")
 
 session = GameSession()
 
@@ -97,24 +113,25 @@ def start_rabbitmq_consumer(loop):
     host = os.environ.get('RABBITMQ_HOST', 'rabbitmq-broker')
     queue = 'board_state_queue'
     
-    def callback(ch, method, properties, body):
-        try:
-            fused_state = json.loads(body)
-            # Use thread-safe way to call async method
-            asyncio.run_coroutine_threadsafe(handle_vision_update(fused_state), loop)
-        except Exception as e:
-            logger.error(f"Error in RabbitMQ callback: {e}")
-
     while True:
         try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
+            logger.info(f"Connecting to RabbitMQ at {host}...")
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, heartbeat=600))
             channel = connection.channel()
             channel.queue_declare(queue=queue)
+            
+            def callback(ch, method, properties, body):
+                try:
+                    fused_state = json.loads(body)
+                    asyncio.run_coroutine_threadsafe(handle_vision_update(fused_state), loop)
+                except Exception as e:
+                    logger.error(f"Error in RabbitMQ callback: {e}")
+
             channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
-            logger.info(f"GLAS consuming from RabbitMQ at {host}")
+            logger.info("GLAS successfully consuming from board_state_queue")
             channel.start_consuming()
         except Exception as e:
-            logger.error(f"RabbitMQ connection failed, retrying in 5s: {e}")
+            logger.error(f"RabbitMQ connection lost, retrying in 5s: {e}")
             time.sleep(5)
 
 async def handle_vision_update(fused_state):
@@ -123,12 +140,10 @@ async def handle_vision_update(fused_state):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     loop = asyncio.get_running_loop()
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, args=(loop,), daemon=True)
     consumer_thread.start()
     yield
-    # Shutdown logic if any
 
 app = FastAPI(title="Chess Logic API (GLAS)", lifespan=lifespan)
 
@@ -162,5 +177,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    import time
     uvicorn.run(app, host="0.0.0.0", port=8000)
