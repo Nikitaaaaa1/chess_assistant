@@ -32,27 +32,31 @@ class RabbitMQPublisher:
         self.connect()
 
     def connect(self):
-        try:
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, heartbeat=600))
-            self.channel = self.connection.channel()
-            self.channel.queue_declare(queue=self.queue)
-            logger.info(f"Connected to RabbitMQ at {self.host}")
-        except Exception as e:
-            logger.error(f"Failed to connect to RabbitMQ: {e}")
+        while True:
+            try:
+                logger.info(f"Attempting to connect to RabbitMQ at {self.host}...")
+                self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, heartbeat=600))
+                self.channel = self.connection.channel()
+                self.channel.queue_declare(queue=self.queue)
+                logger.info(f"Successfully connected to RabbitMQ at {self.host}")
+                return
+            except Exception as e:
+                logger.warning(f"RabbitMQ connection failed, retrying in 5s: {e}")
+                time.sleep(5)
 
     def publish(self, state):
         if not self.channel or self.connection.is_closed:
             self.connect()
-        if self.channel:
-            try:
-                self.channel.basic_publish(
-                    exchange='',
-                    routing_key=self.queue,
-                    body=json.dumps(state)
-                )
-            except Exception as e:
-                logger.error(f"Error publishing to RabbitMQ: {e}")
-                self.channel = None
+        try:
+            self.channel.basic_publish(
+                exchange='',
+                routing_key=self.queue,
+                body=json.dumps(state)
+            )
+            logger.info(f"Published board state to RabbitMQ: {len(state)} pieces.")
+        except Exception as e:
+            logger.error(f"Error publishing to RabbitMQ: {e}")
+            self.channel = None
 
 class PerspectiveManager:
     def __init__(self, target_size=800):
@@ -86,7 +90,6 @@ class MultiCaptureService:
         logger.info(f"Initialized MultiCapture with {self.num_sources} sources (Mock: {use_mock}).")
 
     def rescan_mock_sources(self):
-        """Discovers mock files. Called on init and periodically in the loop."""
         new_mock_files = []
         for src in self.sources:
             src_str = str(src)
@@ -99,7 +102,6 @@ class MultiCaptureService:
             else:
                 new_mock_files.append([src_str])
         
-        # Update caps for new videos if needed
         if not self.caps:
             for file_list in new_mock_files:
                 if file_list and (file_list[0].endswith(('.mp4', '.avi'))):
@@ -111,7 +113,6 @@ class MultiCaptureService:
         self.last_rescan = time.time()
 
     def get_all_frames(self):
-        # Periodically rescan mock directory (every 5 seconds)
         if self.use_mock and (time.time() - self.last_rescan > 5):
             self.rescan_mock_sources()
 
@@ -139,7 +140,6 @@ class MultiCaptureService:
                 ret, frame = self.caps[index].read()
             return frame if ret else np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Pick a random file from the list
         img_path = random.choice(file_list)
         if os.path.isdir(img_path): return np.zeros((480, 640, 3), dtype=np.uint8)
             
