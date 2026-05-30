@@ -23,6 +23,10 @@ app = Flask(__name__)
 current_frame = None
 frame_lock = threading.Lock()
 
+# Constants for standardized processing
+PROCESSING_WIDTH = 1280
+PROCESSING_HEIGHT = 720
+
 class RabbitMQPublisher:
     def __init__(self, host='rabbitmq-broker', queue='board_state_queue'):
         self.host = host
@@ -58,7 +62,6 @@ class RabbitMQPublisher:
                 routing_key=self.queue,
                 body=json.dumps(state)
             )
-            logger.info(f"Published board state to RabbitMQ: {len(state)} pieces.")
         except Exception as e:
             logger.error(f"Error publishing: {e}")
             self.channel = None
@@ -118,7 +121,7 @@ class MultiCaptureService:
         self.mock_files = new_mock_files
         self.last_rescan = time.time()
         if self.use_mock:
-            logger.info(f"Mock Rescan: Found {sum(len(f) for f in self.mock_files)} files across {len(self.mock_files)} sources.")
+            logger.info(f"Mock Rescan: Found {sum(len(f) for f in self.mock_files)} files.")
 
     def get_all_frames(self):
         if self.use_mock and (time.time() - self.last_rescan > 10):
@@ -134,6 +137,11 @@ class MultiCaptureService:
                 if not ret:
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
                     cv2.putText(frame, "CAM SIGNAL LOST", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            
+            # Standardization: Resize every input frame to 1280x720 for consistent coordinate mapping
+            if frame is not None and frame.size > 0:
+                frame = cv2.resize(frame, (PROCESSING_WIDTH, PROCESSING_HEIGHT))
+                
             frames.append(frame)
         return frames
 
@@ -157,8 +165,8 @@ class MultiCaptureService:
         return frame
 
     def error_frame(self, text):
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(frame, text, (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        frame = np.zeros((PROCESSING_HEIGHT, PROCESSING_WIDTH, 3), dtype=np.uint8)
+        cv2.putText(frame, text, (50, 360), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         return frame
 
     def release(self):
@@ -210,7 +218,9 @@ def vision_loop():
     fusion = FusionManager()
     publisher = RabbitMQPublisher(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq-broker'))
     
-    default_corners = [[100, 100], [700, 100], [700, 700], [100, 700]]
+    # New defaults relative to 1280x720: Large central square
+    # These points will be used if calibration_config.json is missing or doesn't have the key
+    default_corners = [[240, 20], [1040, 20], [1040, 700], [240, 700]]
     
     try:
         while True:
@@ -227,27 +237,33 @@ def vision_loop():
                 corners = config.get(cam_key, default_corners)
                 
                 try:
+                    # Process frame
                     warped = pm.warp_frame(frame, corners)
                     detections = detector.detect_pieces(warped, gm)
                     all_detections.append(detections)
                     
-                    # Create a copy for raw display with overlays
-                    display_frame = frame.copy()
-                    
-                    # Map detections back to raw frame (approximate via inverse warp or just show on warped)
-                    # For simplicity and correctness, we will now stream the WARPED frame with overlays 
-                    # as it's much more informative for debugging.
-                    
                     if i == 0:
+                        # Draw overlays for debug stream
                         debug_frame = warped.copy()
                         gm.draw_grid(debug_frame)
                         for det in detections:
                             (x, y, w, h) = gm.get_square_bounds(det['square'])
-                            cv2.putText(debug_frame, det['piece'], (x + 10, y + 40), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                        raw_display_frames.append(cv2.resize(debug_frame, (640, 480)))
+                            cv2.putText(debug_frame, det['piece'], (x + 10, y + 45), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                        
+                        # Show both the RAW scaled frame and the Warped frame for comparison
+                        # We resize them to fit side-by-side or just show debug
+                        raw_preview = cv2.resize(frame, (640, 360))
+                        cv2.rectangle(raw_preview, (int(corners[0][0]/2), int(corners[0][1]/2)), 
+                                      (int(corners[2][0]/2), int(corners[2][1]/2)), (0, 0, 255), 2)
+                        
+                        warped_preview = cv2.resize(debug_frame, (640, 640))
+                        
+                        # Let's stack them vertically or horizontally. 
+                        # To keep it simple, we'll just stream the debug_frame but at a good size.
+                        raw_display_frames.append(cv2.resize(debug_frame, (640, 640)))
                     else:
-                        raw_display_frames.append(cv2.resize(frame, (640, 480)))
+                        raw_display_frames.append(cv2.resize(frame, (640, 360)))
 
                 except Exception as e:
                     logger.error(f"Error source {i}: {e}")
@@ -257,16 +273,11 @@ def vision_loop():
                 publisher.publish(fused_state)
             
             if raw_display_frames:
+                # Simple tiling
                 if len(raw_display_frames) == 1:
                     final_display = raw_display_frames[0]
-                elif len(raw_display_frames) == 2:
-                    final_display = np.hstack(raw_display_frames)
-                else: # 4
-                    while len(raw_display_frames) < 4:
-                        raw_display_frames.append(np.zeros((480, 640, 3), dtype=np.uint8))
-                    top = np.hstack(raw_display_frames[:2])
-                    bottom = np.hstack(raw_display_frames[2:4])
-                    final_display = np.vstack([top, bottom])
+                else:
+                    final_display = np.hstack(raw_display_frames[:2])
                 
                 with frame_lock:
                     current_frame = final_display

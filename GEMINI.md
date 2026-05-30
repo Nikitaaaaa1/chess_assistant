@@ -23,8 +23,12 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 - If a user request addresses a task out of the current roadmap sequence or is unrelated to the active focus, the agent **MUST** propose creating a new branch.
 - New branches **MUST** be created from the **`develop`** branch (not `main`).
 - Branch names **MUST** follow [Conventional Branch](https://conventional-branch.github.io/) standards: `<type>/<description>`.
-- Example: `feat/add-stockfish-integration`, `fix/capture-buffer-overflow`.
 - Refer to `docs/skills/contextual-branching.md` for full guidelines.
+
+### 4. PR & Merge Policy (STRICT)
+- **NO automatic Pull Requests**: The agent must ask for explicit confirmation before creating a PR.
+- **NO automatic Merges**: The agent is STRICTLY FORBIDDEN from merging into the `main` branch. 
+- All integrations into `develop` or `main` require direct user instructions.
 
 ---
 
