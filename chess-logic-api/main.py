@@ -38,7 +38,6 @@ class GameSession:
         logger.info(f"UI client disconnected. Total: {len(self.connections)}")
 
     async def send_state(self, websocket: WebSocket):
-        # We send both actual FEN and a "rendering-safe" version if needed
         is_valid, validation_msg = self.validate_board_for_game()
         
         payload = {
@@ -54,7 +53,6 @@ class GameSession:
             logger.error(f"Failed to send state: {e}")
 
     def validate_board_for_game(self):
-        """Checks if the board is valid for a real game (e.g. has kings)."""
         fen = self.board.fen()
         if 'K' not in fen: return False, "Missing White King"
         if 'k' not in fen: return False, "Missing Black King"
@@ -82,16 +80,10 @@ class GameSession:
                     self.connections.remove(conn)
 
     def process_vision_update(self, fused_state):
-        """
-        Updates the virtual board state based on AVS detections.
-        Allows for incomplete boards (missing kings) by using Board(None).
-        """
         if fused_state == self.last_physical_state:
             return True
         
         logger.info(f"Processing Vision Update: {len(fused_state)} pieces detected.")
-        
-        # We start with an empty board to reflect exactly what vision sees
         new_board = chess.Board(None) 
         
         piece_map = {
@@ -111,7 +103,6 @@ class GameSession:
             except Exception as e:
                 logger.warning(f"Failed to set piece {piece_label} at {square_name}: {e}")
 
-        # In 'Sync/Vision' mode, we accept the board even if it's incomplete
         self.board = new_board
         self.last_physical_state = fused_state
         return True
@@ -162,10 +153,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chess Logic API (GLAS)", lifespan=lifespan)
 
+# FIX: For development, we allow all origins and disable credentials to avoid 403 on WebSockets
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False, # Must be False if allow_origins is ["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -180,6 +172,8 @@ async def health():
 
 @app.websocket("/ws/game")
 async def websocket_endpoint(websocket: WebSocket):
+    # Some environments (like Gemini browser) send Origin headers that might trigger 403
+    # even with allow_origins=["*"] if allow_credentials is True.
     await websocket.accept()
     await session.connect(websocket)
     try:
