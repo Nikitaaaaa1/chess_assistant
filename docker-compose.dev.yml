@@ -8,12 +8,13 @@ services:
       - "8001:8001"
     volumes:
       - ./chess-vision-service:/app
+      - ./mock-data:/mock-data
       - /app/venv # Don't overwrite container venv with local one
     networks:
       - chess-net
     environment:
       - USE_MOCK_DATA=true
-      - CAMERA_SOURCES=../mock-data
+      - CAMERA_SOURCES=/mock-data
       - RABBITMQ_HOST=rabbitmq-broker
       - PYTHONUNBUFFERED=1
     # Note: main.py uses Flask/Thread which doesn't auto-reload by default 

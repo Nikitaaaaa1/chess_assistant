@@ -180,7 +180,7 @@ def vision_loop():
     camera_env = os.environ.get("CAMERA_SOURCES", "0,1")
     
     if use_mock and "CAMERA_SOURCES" not in os.environ:
-        sources = ["../mock-data"]
+        sources = ["/mock-data"]
     else:
         sources = [s.strip() for s in camera_env.split(",")]
         if not use_mock:
