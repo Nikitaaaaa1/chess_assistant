@@ -1,6 +1,6 @@
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ChessBoardViewProps {
   fen: string;
@@ -9,6 +9,16 @@ interface ChessBoardViewProps {
 
 export const ChessBoardView = ({ fen, onMove }: ChessBoardViewProps) => {
   const [game, setGame] = useState(new Chess(fen));
+
+  // Update local game state when external FEN prop changes
+  useEffect(() => {
+    try {
+      const newGame = new Chess(fen);
+      setGame(newGame);
+    } catch (e) {
+      console.error("Invalid FEN received:", fen);
+    }
+  }, [fen]);
 
   function makeAMove(move: any) {
     const gameCopy = new Chess(game.fen());
@@ -37,8 +47,8 @@ export const ChessBoardView = ({ fen, onMove }: ChessBoardViewProps) => {
         position={game.fen()} 
         onPieceDrop={onDrop}
         boardOrientation="white"
-        customDarkSquareStyle={{ backgroundColor: '#769656' }}
-        customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+        customDarkSquareStyle={{ backgroundColor: '#1e293b' }} // Darker slate for match
+        customLightSquareStyle={{ backgroundColor: '#334155' }} // Lighter slate
       />
     </div>
   );

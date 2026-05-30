@@ -1,31 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChessBoardView } from './components/ChessBoardView';
 import { ControlPanel } from './components/ControlPanel';
 import { VisionPreview } from './components/VisionPreview';
 import { Cpu, Github } from 'lucide-react';
 
 function App() {
-  const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const [fen, setFen] = useState("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   const [apiStatus, setApiStatus] = useState<string>('Connecting...');
   const [isOnline, setIsOnline] = useState<boolean>(false);
+  const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const checkHealth = () => {
-      fetch('http://localhost:8000/health')
-        .then(res => res.json())
-        .then(data => {
-          setApiStatus(data.status === 'healthy' ? 'ALL SERVICES OPERATIONAL' : 'SYSTEM DEGRADED');
-          setIsOnline(data.status === 'healthy');
-        })
-        .catch(() => {
-          setApiStatus('SYSTEM OFFLINE');
-          setIsOnline(false);
-        });
+    const connectWS = () => {
+      const socket = new WebSocket('ws://localhost:8000/ws/game');
+      
+      socket.onopen = () => {
+        logger.info("WebSocket connected");
+        setIsOnline(true);
+        setApiStatus('ALL SERVICES OPERATIONAL');
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'GAME_STATE') {
+          setFen(data.fen);
+        }
+      };
+
+      socket.onclose = () => {
+        setIsOnline(false);
+        setApiStatus('SYSTEM OFFLINE');
+        // Try to reconnect after 3 seconds
+        setTimeout(connectWS, 3000);
+      };
+
+      ws.current = socket;
     };
 
-    checkHealth();
-    const interval = setInterval(checkHealth, 5000);
-    return () => clearInterval(interval);
+    connectWS();
+
+    return () => {
+      ws.current?.close();
+    };
   }, []);
 
   return (
@@ -63,7 +79,7 @@ function App() {
         <section className="lg:col-span-7 flex justify-center">
           <div className="w-full flex flex-col items-center">
             <ChessBoardView 
-              fen={startFen} 
+              fen={fen} 
               onMove={(move) => console.log('Board Move:', move)} 
             />
             <div className="mt-6 w-full flex justify-between px-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
@@ -92,5 +108,11 @@ function App() {
     </div>
   )
 }
+
+// Simple logger mock since we don't have a global logger on frontend yet
+const logger = {
+  info: (msg: string) => console.log(`[INFO] ${msg}`),
+  error: (msg: string) => console.error(`[ERROR] ${msg}`)
+};
 
 export default App
