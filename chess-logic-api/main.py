@@ -29,7 +29,7 @@ class GameSession:
         self.last_raw_state = {}
         self.stable_state = {}
         self.stability_counter = 0
-        self.STABILITY_THRESHOLD = 2
+        self.STABILITY_THRESHOLD = 2 # Stability count for filtering noise
 
     async def connect(self, websocket: WebSocket):
         async with self.lock:
@@ -37,7 +37,7 @@ class GameSession:
                 self.connections.append(websocket)
         logger.info(f"UI client registered. Total active: {len(self.connections)}")
         
-        # Small delay to ensure handshake is fully processed by the network stack
+        # Small delay to ensure handshake is fully processed
         await asyncio.sleep(0.5)
         await self.send_state(websocket)
 
@@ -62,7 +62,7 @@ class GameSession:
         try:
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
-            logger.debug(f"Silent failure sending state (likely closed): {e}")
+            logger.debug(f"Silent failure sending state: {e}")
 
     async def broadcast_state(self):
         is_valid, validation_msg = self.validate_board_for_game()
@@ -98,13 +98,16 @@ class GameSession:
         return True, "Valid"
 
     def process_vision_update(self, fused_state: Dict[str, str]):
+        """
+        Difference Engine: Analyzes changes between physical and virtual boards.
+        """
         # 1. Noise filtering
         if fused_state == self.last_raw_state:
             self.stability_counter += 1
         else:
             self.last_raw_state = fused_state
             self.stability_counter = 0
-            return False
+            return False 
 
         if self.stability_counter < self.STABILITY_THRESHOLD:
             return False
@@ -113,24 +116,25 @@ class GameSession:
         if fused_state == self.stable_state:
             return False
             
-        logger.info(f"STABLE CHANGE DETECTED: {len(fused_state)} pieces.")
+        logger.info(f"STABLE CHANGE DETECTED: {len(fused_state)} pieces detected.")
         
         # 3. Infer Move or Hard Sync
         diff_count = self.calculate_difference(fused_state)
         
         if diff_count > 4:
-            logger.info("Radical change detected. Performing Hard Sync.")
+            logger.info("Radical change detected (>4 squares). Performing Hard Sync.")
             self.hard_sync(fused_state)
         elif diff_count > 0:
-            logger.info(f"Attempting move inference for {diff_count} squares.")
+            logger.info(f"Minor change detected ({diff_count} squares). Attempting move inference.")
             if not self.infer_move(fused_state):
-                logger.warning("Move inference failed. Forcing sync.")
+                logger.warning("Could not infer a legal move. Forcing sync.")
                 self.hard_sync(fused_state)
         
         self.stable_state = fused_state
         return True
 
     def calculate_difference(self, physical_state):
+        """Counts squares that differ between current board and vision."""
         diffs = 0
         for i in range(64):
             sq_name = chess.square_name(i)
@@ -142,13 +146,16 @@ class GameSession:
         return diffs
 
     def infer_move(self, physical_state):
+        """Tries to find a legal move that transitions board to physical_state."""
         vacated = [] 
         occupied = [] 
+        
         for i in range(64):
             sq_name = chess.square_name(i)
             virt_p = self.board.piece_at(i)
             virt_l = self.get_piece_label(virt_p) if virt_p else None
             phys_l = physical_state.get(sq_name)
+            
             if virt_l and not phys_l:
                 vacated.append((i, virt_l))
             elif phys_l and virt_l != phys_l:
@@ -158,10 +165,12 @@ class GameSession:
             from_sq = vacated[0][0]
             to_sq = occupied[0][0]
             move = chess.Move(from_sq, to_sq)
+            
             if self.board.piece_at(from_sq).piece_type == chess.PAWN:
                 if (chess.square_rank(to_sq) == 7 and self.board.turn == chess.WHITE) or \
                    (chess.square_rank(to_sq) == 0 and self.board.turn == chess.BLACK):
                     move.promotion = chess.QUEEN
+
             if move in self.board.legal_moves:
                 self.board.push(move)
                 logger.info(f"MOVE INFERRED: {move.uci()}")
@@ -169,6 +178,7 @@ class GameSession:
         return False
 
     def hard_sync(self, fused_state):
+        """Forces the virtual board to match the physical detection exactly."""
         new_board = chess.Board(None) 
         piece_map = {
             "wP": chess.PAWN, "wN": chess.KNIGHT, "wB": chess.BISHOP, 
@@ -253,7 +263,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await session.connect(websocket)
     try:
         while True:
-            # Check connection state before waiting for text
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.receive_text()
             else:
