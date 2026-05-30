@@ -93,8 +93,12 @@ class PerspectiveManager:
         max_area = 0
         for cnt in contours:
             area = cv2.contourArea(cnt)
+            # Ignore if too small OR if it covers almost the entire frame (likely just the frame itself)
             if area < (frame.shape[0] * frame.shape[1] * 0.1): continue
+            if area > (frame.shape[0] * frame.shape[1] * 0.98): continue
+
             peri = cv2.arcLength(cnt, True)
+
             approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
             if len(approx) == 4:
                 if area > max_area:
