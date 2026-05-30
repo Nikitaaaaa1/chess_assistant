@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  chess-vision-service:
+    build:
+      context: ./chess-vision-service
+      dockerfile: Dockerfile
+    container_name: chess-vision-service
+    networks:
+      - chess-net
+    restart: always
+
+  chess-logic-api:
+    build:
+      context: ./chess-logic-api
+      dockerfile: Dockerfile
+    container_name: chess-logic-api
+    ports:
+      - "8000:8000"
+    networks:
+      - chess-net
+    environment:
+      - RABBITMQ_HOST=rabbitmq-broker
+    restart: always
+
+  chess-web-ui:
+    build:
+      context: ./chess-web-ui
+      dockerfile: Dockerfile
+    container_name: chess-web-ui
+    ports:
+      - "3000:5173"
+    networks:
+      - chess-net
+    restart: always
+
+  rabbitmq-broker:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-broker
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - chess-net
+    restart: always
+
+networks:
+  chess-net:
+    driver: bridge

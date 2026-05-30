@@ -4,3 +4,4 @@ numpy
 pyyaml
 ultralytics
 onnxruntime
+pytest
