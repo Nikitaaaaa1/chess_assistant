@@ -34,14 +34,19 @@ class RabbitMQPublisher:
     def connect(self):
         while True:
             try:
-                logger.info(f"Attempting to connect to RabbitMQ at {self.host}...")
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, heartbeat=600))
+                logger.info(f"Connecting to RabbitMQ at {self.host}...")
+                self.connection = pika.BlockingConnection(pika.ConnectionParameters(
+                    host=self.host, 
+                    heartbeat=600,
+                    connection_attempts=10,
+                    retry_delay=5
+                ))
                 self.channel = self.connection.channel()
                 self.channel.queue_declare(queue=self.queue)
-                logger.info(f"Successfully connected to RabbitMQ at {self.host}")
+                logger.info("Successfully connected to RabbitMQ.")
                 return
             except Exception as e:
-                logger.warning(f"RabbitMQ connection failed, retrying in 5s: {e}")
+                logger.warning(f"RabbitMQ connection failed: {e}. Retrying in 5s...")
                 time.sleep(5)
 
     def publish(self, state):
@@ -53,25 +58,9 @@ class RabbitMQPublisher:
                 routing_key=self.queue,
                 body=json.dumps(state)
             )
-            logger.info(f"Published board state to RabbitMQ: {len(state)} pieces.")
         except Exception as e:
-            logger.error(f"Error publishing to RabbitMQ: {e}")
+            logger.error(f"Error publishing: {e}")
             self.channel = None
-
-class PerspectiveManager:
-    def __init__(self, target_size=800):
-        self.target_size = target_size
-        self.destination_points = np.float32([
-            [0, 0], [target_size, 0], [target_size, target_size], [0, target_size]
-        ])
-
-    def get_warp_matrix(self, corner_points):
-        src = np.float32(corner_points)
-        return cv2.getPerspectiveTransform(src, self.destination_points)
-
-    def warp_frame(self, frame, corner_points):
-        matrix = self.get_warp_matrix(corner_points)
-        return cv2.warpPerspective(frame, matrix, (self.target_size, self.target_size))
 
 class MultiCaptureService:
     def __init__(self, sources=[0], use_mock=False):
@@ -86,8 +75,7 @@ class MultiCaptureService:
         else:
             self.caps = [cv2.VideoCapture(src) for src in sources]
             
-        self.num_sources = len(self.caps) if not use_mock else len(self.mock_files)
-        logger.info(f"Initialized MultiCapture with {self.num_sources} sources (Mock: {use_mock}).")
+        logger.info(f"Capture Service: {len(self.mock_files if use_mock else self.caps)} sources (Mock: {use_mock})")
 
     def rescan_mock_sources(self):
         new_mock_files = []
@@ -98,22 +86,27 @@ class MultiCaptureService:
                 for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG', '*.mp4', '*.avi']:
                     found = glob.glob(os.path.join(src_str, ext))
                     files.extend(found)
-                new_mock_files.append(sorted(files))
+                # Filter out directories just in case
+                files = [f for f in files if os.path.isfile(f)]
+                new_mock_files.append(sorted(list(set(files))))
             else:
-                new_mock_files.append([src_str])
+                if os.path.isfile(src_str):
+                    new_mock_files.append([src_str])
         
-        if not self.caps:
+        if not self.caps and new_mock_files:
             for file_list in new_mock_files:
-                if file_list and (file_list[0].endswith(('.mp4', '.avi'))):
+                if file_list and (file_list[0].lower().endswith(('.mp4', '.avi'))):
                     self.caps.append(cv2.VideoCapture(file_list[0]))
                 else:
                     self.caps.append(None)
         
         self.mock_files = new_mock_files
         self.last_rescan = time.time()
+        if self.use_mock:
+            logger.info(f"Mock Rescan: Found {sum(len(f) for f in self.mock_files)} files across {len(self.mock_files)} sources.")
 
     def get_all_frames(self):
-        if self.use_mock and (time.time() - self.last_rescan > 5):
+        if self.use_mock and (time.time() - self.last_rescan > 10):
             self.rescan_mock_sources()
 
         frames = []
@@ -125,26 +118,33 @@ class MultiCaptureService:
                 ret, frame = self.caps[i].read()
                 if not ret:
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(frame, "CAM SIGNAL LOST", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             frames.append(frame)
         return frames
 
     def get_mock_frame(self, index):
+        if index >= len(self.mock_files): return self.error_frame("INDEX ERROR")
         file_list = self.mock_files[index]
-        if not file_list:
-            return np.zeros((480, 640, 3), dtype=np.uint8)
+        if not file_list: return self.error_frame("NO FILES IN DIR")
         
         if self.caps[index] is not None:
             ret, frame = self.caps[index].read()
             if not ret:
                 self.caps[index].set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = self.caps[index].read()
-            return frame if ret else np.zeros((480, 640, 3), dtype=np.uint8)
+            return frame if ret else self.error_frame("VIDEO ERROR")
         
         img_path = random.choice(file_list)
-        if os.path.isdir(img_path): return np.zeros((480, 640, 3), dtype=np.uint8)
-            
         frame = cv2.imread(img_path)
-        return frame if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+        if frame is None:
+            logger.error(f"Failed to read image: {img_path}")
+            return self.error_frame(f"READ ERROR: {os.path.basename(img_path)}")
+        return frame
+
+    def error_frame(self, text):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame, text, (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        return frame
 
     def release(self):
         for cap in self.caps:
@@ -157,12 +157,17 @@ def video_feed():
         while True:
             with frame_lock:
                 if current_frame is None:
-                    time.sleep(0.1)
-                    continue
-                (flag, encodedImage) = cv2.imencode(".jpg", current_frame)
+                    # Return a "WAITING" frame instead of nothing
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    cv2.putText(frame, "WAITING FOR VISION...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    (flag, encodedImage) = cv2.imencode(".jpg", frame)
+                else:
+                    (flag, encodedImage) = cv2.imencode(".jpg", current_frame)
+                
                 if not flag:
                     time.sleep(0.1)
                     continue
+                    
             yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
             time.sleep(0.1)
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
@@ -177,14 +182,11 @@ def load_calibration(path="calibration_config.json"):
 def vision_loop():
     global current_frame
     use_mock = os.environ.get("USE_MOCK_DATA", "false").lower() == "true"
-    camera_env = os.environ.get("CAMERA_SOURCES", "0,1")
+    camera_env = os.environ.get("CAMERA_SOURCES", "/mock-data") # Default to /mock-data
     
-    if use_mock and "CAMERA_SOURCES" not in os.environ:
-        sources = ["/mock-data"]
-    else:
-        sources = [s.strip() for s in camera_env.split(",")]
-        if not use_mock:
-            sources = [int(s) if s.isdigit() else s for s in sources]
+    sources = [s.strip() for s in camera_env.split(",")]
+    if not use_mock:
+        sources = [int(s) if s.isdigit() else s for s in sources]
 
     logger.info(f"Vision loop starting. Sources: {sources}, Mock: {use_mock}")
     cap = MultiCaptureService(sources=sources, use_mock=use_mock)
@@ -216,12 +218,11 @@ def vision_loop():
                     detections = detector.detect_pieces(warped, gm)
                     all_detections.append(detections)
                 except Exception as e:
-                    logger.error(f"Error processing source {i}: {e}")
+                    logger.error(f"Error source {i}: {e}")
             
             if all_detections:
                 fused_state = fusion.fuse(all_detections)
-                if fused_state:
-                    publisher.publish(fused_state)
+                publisher.publish(fused_state)
             
             if raw_display_frames:
                 if len(raw_display_frames) == 1:
@@ -241,7 +242,7 @@ def vision_loop():
             time.sleep(0.5 if use_mock else 0.05)
             
     except Exception as e:
-        logger.error(f"Fatal error in vision loop: {e}")
+        logger.error(f"Fatal error: {e}")
     finally:
         cap.release()
 
