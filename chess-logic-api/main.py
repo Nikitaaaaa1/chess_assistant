@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketState
 from contextlib import asynccontextmanager
 import logging
 import asyncio
@@ -28,21 +29,28 @@ class GameSession:
         self.last_raw_state = {}
         self.stable_state = {}
         self.stability_counter = 0
-        self.STABILITY_THRESHOLD = 2 # Lowered for faster dev feedback
+        self.STABILITY_THRESHOLD = 2
 
     async def connect(self, websocket: WebSocket):
         async with self.lock:
-            self.connections.append(websocket)
-        logger.info(f"UI client registered. Total: {len(self.connections)}")
+            if websocket not in self.connections:
+                self.connections.append(websocket)
+        logger.info(f"UI client registered. Total active: {len(self.connections)}")
+        
+        # Small delay to ensure handshake is fully processed by the network stack
+        await asyncio.sleep(0.5)
         await self.send_state(websocket)
 
     async def disconnect(self, websocket: WebSocket):
         async with self.lock:
             if websocket in self.connections:
                 self.connections.remove(websocket)
-        logger.info(f"UI client disconnected. Total: {len(self.connections)}")
+        logger.info(f"UI client disconnected. Remaining: {len(self.connections)}")
 
     async def send_state(self, websocket: WebSocket):
+        if websocket.client_state != WebSocketState.CONNECTED:
+            return
+
         is_valid, validation_msg = self.validate_board_for_game()
         payload = {
             "type": "GAME_STATE",
@@ -54,13 +62,7 @@ class GameSession:
         try:
             await websocket.send_text(json.dumps(payload))
         except Exception as e:
-            logger.error(f"Failed to send state: {e}")
-
-    def validate_board_for_game(self):
-        fen = self.board.fen()
-        if 'K' not in fen: return False, "Missing White King"
-        if 'k' not in fen: return False, "Missing Black King"
-        return True, "Valid"
+            logger.debug(f"Silent failure sending state (likely closed): {e}")
 
     async def broadcast_state(self):
         is_valid, validation_msg = self.validate_board_for_game()
@@ -72,20 +74,30 @@ class GameSession:
             "validation_msg": validation_msg
         }
         message = json.dumps(payload)
+        
         async with self.lock:
             disconnected = []
             for connection in self.connections:
-                try:
-                    await connection.send_text(message)
-                except:
+                if connection.client_state == WebSocketState.CONNECTED:
+                    try:
+                        await connection.send_text(message)
+                    except Exception as e:
+                        logger.warning(f"Broadcast failed for a client: {e}")
+                        disconnected.append(connection)
+                else:
                     disconnected.append(connection)
+            
             for conn in disconnected:
                 if conn in self.connections:
                     self.connections.remove(conn)
 
+    def validate_board_for_game(self):
+        fen = self.board.fen()
+        if 'K' not in fen: return False, "Missing White King"
+        if 'k' not in fen: return False, "Missing Black King"
+        return True, "Valid"
+
     def process_vision_update(self, fused_state: Dict[str, str]):
-        logger.debug(f"Received Vision Update: {len(fused_state)} pieces.")
-        
         # 1. Noise filtering
         if fused_state == self.last_raw_state:
             self.stability_counter += 1
@@ -107,7 +119,7 @@ class GameSession:
         diff_count = self.calculate_difference(fused_state)
         
         if diff_count > 4:
-            logger.info("Radical change (>4 squares). Performing Hard Sync.")
+            logger.info("Radical change detected. Performing Hard Sync.")
             self.hard_sync(fused_state)
         elif diff_count > 0:
             logger.info(f"Attempting move inference for {diff_count} squares.")
@@ -132,13 +144,11 @@ class GameSession:
     def infer_move(self, physical_state):
         vacated = [] 
         occupied = [] 
-        
         for i in range(64):
             sq_name = chess.square_name(i)
             virt_p = self.board.piece_at(i)
             virt_l = self.get_piece_label(virt_p) if virt_p else None
             phys_l = physical_state.get(sq_name)
-            
             if virt_l and not phys_l:
                 vacated.append((i, virt_l))
             elif phys_l and virt_l != phys_l:
@@ -148,12 +158,10 @@ class GameSession:
             from_sq = vacated[0][0]
             to_sq = occupied[0][0]
             move = chess.Move(from_sq, to_sq)
-            
             if self.board.piece_at(from_sq).piece_type == chess.PAWN:
                 if (chess.square_rank(to_sq) == 7 and self.board.turn == chess.WHITE) or \
                    (chess.square_rank(to_sq) == 0 and self.board.turn == chess.BLACK):
                     move.promotion = chess.QUEEN
-
             if move in self.board.legal_moves:
                 self.board.push(move)
                 logger.info(f"MOVE INFERRED: {move.uci()}")
@@ -205,10 +213,10 @@ def start_rabbitmq_consumer(loop):
                 except Exception as e:
                     logger.error(f"Error in callback: {e}")
             channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
-            logger.info("GLAS successfully connected to RabbitMQ")
+            logger.info("GLAS consuming from RabbitMQ")
             channel.start_consuming()
         except Exception as e:
-            logger.error(f"RabbitMQ lost: {e}. Retrying...")
+            logger.error(f"RabbitMQ lost: {e}")
             time.sleep(5)
 
 async def handle_vision_update(fused_state):
@@ -220,7 +228,7 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     threading.Thread(target=start_rabbitmq_consumer, args=(loop,), daemon=True).start()
     
-    # Periodic broadcast to keep UI synced even if no vision changes
+    # Periodic broadcast to keep UI synced
     async def heartbeat():
         while True:
             await asyncio.sleep(5)
@@ -244,8 +252,14 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     await session.connect(websocket)
     try:
-        while True: await websocket.receive_text()
-    except WebSocketDisconnect: await session.disconnect(websocket)
+        while True:
+            # Check connection state before waiting for text
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.receive_text()
+            else:
+                break
+    except WebSocketDisconnect:
+        await session.disconnect(websocket)
     except Exception as e:
         logger.error(f"WS error: {e}")
         await session.disconnect(websocket)
