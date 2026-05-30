@@ -7,12 +7,16 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!develop'
   pull_request:
     paths:
       - 'chess-vision-service/**'
+    branches:
+      - develop
+      - main
 
 jobs:
-  test:
+  test-and-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +27,13 @@ jobs:
       - name: Install dependencies
         run: |
           cd chess-vision-service
-          pip install -r requirements.txt
-      - name: Lint (Placeholder)
-        run: echo "Running lint for Vision Service..."
+          pip install ruff pytest opencv-python-headless pika numpy ultralytics
+      - name: Lint with ruff
+        run: |
+          cd chess-vision-service
+          ruff check .
+      - name: Run unit tests
+        run: |
+          cd chess-vision-service
+          export PYTHONPATH=$PYTHONPATH:.
+          pytest tests/

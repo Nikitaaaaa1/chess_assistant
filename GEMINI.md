@@ -28,6 +28,7 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 ### 4. PR & Merge Policy (STRICT)
 - **NO automatic Pull Requests**: The agent must ask for explicit confirmation before creating a PR.
 - **NO automatic Merges**: The agent is STRICTLY FORBIDDEN from merging into the `main` branch. 
+- **NO Direct Pushes to Protected Branches**: The agent is STRICTLY FORBIDDEN from pushing directly to `main` or `develop`. All changes to these branches MUST be made via a Pull Request.
 - All integrations into `develop` or `main` require direct user instructions.
 
 ---

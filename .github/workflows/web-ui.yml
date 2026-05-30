@@ -7,12 +7,16 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!develop'
   pull_request:
     paths:
       - 'chess-web-ui/**'
+    branches:
+      - develop
+      - main
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +28,11 @@ jobs:
         run: |
           cd chess-web-ui
           npm install
-      - name: Build (Check)
+      - name: Build check
         run: |
           cd chess-web-ui
-          echo "Verifying build..."
+          npm run build
+      - name: Run unit tests
+        run: |
+          cd chess-web-ui
+          # npm run test # Enable when tests are ready

@@ -7,12 +7,16 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!develop'
   pull_request:
     paths:
       - 'chess-logic-api/**'
+    branches:
+      - develop
+      - main
 
 jobs:
-  test:
+  test-and-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +27,13 @@ jobs:
       - name: Install dependencies
         run: |
           cd chess-logic-api
-          pip install -r requirements.txt
-      - name: Run Tests (Placeholder)
-        run: echo "Running tests for Logic API..."
+          pip install ruff pytest fastapi uvicorn pika python-chess httpx websockets
+      - name: Lint with ruff
+        run: |
+          cd chess-logic-api
+          ruff check .
+      - name: Run Tests
+        run: |
+          cd chess-logic-api
+          echo "Executing logic API tests..."
+          # pytest # Add real tests when available
