@@ -3,19 +3,20 @@ import logging
 logger = logging.getLogger("AVS.Fusion")
 
 class FusionManager:
-    """Fuses detections from dual cameras to mitigate piece occlusion."""
+    """Fuses detections from multiple cameras to mitigate piece occlusion."""
     def __init__(self, confidence_threshold=0.5):
         self.confidence_threshold = confidence_threshold
 
-    def fuse(self, detections_a, detections_b):
+    def fuse(self, detection_sets):
         """
-        Aggregates board state by comparing confidence scores.
+        Aggregates board state by comparing confidence scores from multiple sources.
+        Expects a list of lists of detections.
         Priority is given to the highest confidence detection for each square.
         """
         final_state = {}
         
-        # Combine both detection lists
-        all_detections = detections_a + detections_b
+        # Flatten all detection sets into one list
+        all_detections = [det for det_set in detection_sets for det in det_set]
         
         # Sort by confidence descending
         all_detections.sort(key=lambda x: x['conf'], reverse=True)

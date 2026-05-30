@@ -8,11 +8,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Calibration")
 
 class Calibrator:
-    def __init__(self, cam_src=0, config_path="calibration_config.json"):
+    def __init__(self, cam_src=0, cam_id=0, config_path="calibration_config.json"):
         self.cam_src = cam_src
+        self.cam_id = cam_id
         self.config_path = config_path
         self.points = []
-        self.window_name = f"Calibrate Camera {cam_src} (Select 4 corners: TL, TR, BR, BL)"
+        self.window_name = f"Calibrate Camera {cam_id} (Select 4 corners: TL, TR, BR, BL)"
 
     def mouse_callback(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -23,12 +24,13 @@ class Calibrator:
     def run(self):
         cap = cv2.VideoCapture(self.cam_src)
         if not cap.isOpened():
-            logger.error(f"Cannot open camera {self.cam_src}")
+            logger.error(f"Cannot open camera source: {self.cam_src}")
             return
 
         cv2.namedWindow(self.window_name)
         cv2.setMouseCallback(self.window_name, self.mouse_callback)
 
+        logger.info(f"Calibrating Camera ID: {self.cam_id} (Source: {self.cam_src})")
         logger.info("Click the 4 corners of the chessboard in order: Top-Left, Top-Right, Bottom-Right, Bottom-Left.")
 
         while True:
@@ -36,7 +38,7 @@ class Calibrator:
             if not ret:
                 # Simulation mode (fallback)
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(frame, "SIMULATION MODE", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(frame, "NO SIGNAL / SIMULATION", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
             for i, p in enumerate(self.points):
                 cv2.circle(frame, p, 5, (0, 255, 0), -1)
@@ -62,18 +64,27 @@ class Calibrator:
     def save_config(self):
         config = {}
         if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
-                config = json.load(f)
+            try:
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+            except:
+                config = {}
 
-        config[f"camera_{self.cam_src}"] = self.points
+        config[f"camera_{self.cam_id}"] = self.points
         
         with open(self.config_path, 'w') as f:
             json.dump(config, f, indent=4)
         
-        logger.info(f"Calibration for Camera {self.cam_src} saved to {self.config_path}")
+        logger.info(f"Calibration for Camera {self.cam_id} saved to {self.config_path}")
 
 if __name__ == "__main__":
     import sys
-    src = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-    calib = Calibrator(cam_src=src)
+    # Usage: python calibrate.py [source] [id]
+    # source can be 0, 1 or "rtsp://..."
+    # id is the index (0, 1, 2, 3) used in the config file
+    src_input = sys.argv[1] if len(sys.argv) > 1 else "0"
+    src = int(src_input) if src_input.isdigit() else src_input
+    cam_id = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    
+    calib = Calibrator(cam_src=src, cam_id=cam_id)
     calib.run()

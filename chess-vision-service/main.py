@@ -26,21 +26,27 @@ class PerspectiveManager:
         matrix = self.get_warp_matrix(corner_points)
         return cv2.warpPerspective(frame, matrix, (self.target_size, self.target_size))
 
-class CaptureService:
-    def __init__(self, cam_a_src=0, cam_b_src=1):
-        self.cam_a = cv2.VideoCapture(cam_a_src)
-        self.cam_b = cv2.VideoCapture(cam_b_src)
+class MultiCaptureService:
+    """Supports 1, 2, or 4 cameras dynamically."""
+    def __init__(self, camera_sources=[0]):
+        self.caps = [cv2.VideoCapture(src) for src in camera_sources]
+        self.num_cameras = len(self.caps)
+        logger.info(f"Initialized MultiCapture with {self.num_cameras} cameras.")
 
-    def get_frames(self):
-        ret_a, frame_a = self.cam_a.read()
-        ret_b, frame_b = self.cam_b.read()
-        if not ret_a: frame_a = np.zeros((480, 640, 3), dtype=np.uint8)
-        if not ret_b: frame_b = np.zeros((480, 640, 3), dtype=np.uint8)
-        return frame_a, frame_b
+    def get_all_frames(self):
+        frames = []
+        for i, cap in enumerate(self.caps):
+            ret, frame = cap.read()
+            if not ret:
+                # Provide a blank frame if camera fails
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                logger.warning(f"Camera {i} failed to return frame.")
+            frames.append(frame)
+        return frames
 
     def release(self):
-        self.cam_a.release()
-        self.cam_b.release()
+        for cap in self.caps:
+            cap.release()
 
 def load_calibration(path="calibration_config.json"):
     if os.path.exists(path):
@@ -48,39 +54,51 @@ def load_calibration(path="calibration_config.json"):
     return {}
 
 def main():
-    logger.info("Initializing AI Vision Service (AVS)...")
+    # Configuration: determine camera count and sources
+    # Can be passed via env var or default to [0, 1] as before
+    camera_env = os.environ.get("CAMERA_SOURCES", "0,1")
+    try:
+        sources = [int(s.strip()) if s.strip().isdigit() else s.strip() for s in camera_env.split(",")]
+    except:
+        sources = [0]
     
-    cap = CaptureService()
+    logger.info(f"Initializing AI Vision Service (AVS) with sources: {sources}")
+    
+    cap = MultiCaptureService(camera_sources=sources)
     pm = PerspectiveManager(target_size=800)
     gm = GridManager(board_size=800)
     detector = PieceDetector()
     fusion = FusionManager()
     
+    # Default corners if no calibration exists
     default_corners = [(120, 40), (520, 40), (520, 440), (120, 440)]
     
     try:
         while True:
             config = load_calibration()
-            frame_a, frame_b = cap.get_frames()
+            frames = cap.get_all_frames()
             
-            # 1. Perspective Warping
-            corners_a = config.get("camera_0", default_corners)
-            corners_b = config.get("camera_1", default_corners)
+            all_detections = []
             
-            warped_a = pm.warp_frame(frame_a, corners_a)
-            warped_b = pm.warp_frame(frame_b, corners_b)
+            for i, frame in enumerate(frames):
+                # 1. Perspective Warping for each camera
+                cam_key = f"camera_{i}"
+                corners = config.get(cam_key, default_corners)
+                
+                warped = pm.warp_frame(frame, corners)
+                
+                # 2. YOLO Inference for each camera
+                detections = detector.detect_pieces(warped, gm)
+                all_detections.append(detections)
             
-            # 2. YOLO Inference
-            detections_a = detector.detect_pieces(warped_a, gm)
-            detections_b = detector.detect_pieces(warped_b, gm)
+            # 3. Multi-Camera Fusion
+            fused_state = fusion.fuse(all_detections)
             
-            # 3. Dual-Camera Fusion
-            fused_state = fusion.fuse(detections_a, detections_b)
+            logger.info(f"AVS Cycle Complete. Sources: {len(frames)}, Total pieces: {len(fused_state)}")
             
-            logger.info(f"AVS Detection Cycle Complete. {len(fused_state)} pieces detected.")
-            # In Task 5, we will publish fused_state to RabbitMQ
+            # TODO: Publish fused_state to RabbitMQ (Task 5)
             
-            time.sleep(0.1)
+            time.sleep(0.05) # Increased frequency for multi-cam responsiveness
             
     except KeyboardInterrupt:
         logger.info("Shutting down AVS...")
