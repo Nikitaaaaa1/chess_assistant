@@ -75,36 +75,46 @@ class MultiCaptureService:
         self.sources = sources
         self.caps = []
         self.mock_files = []
+        self.last_rescan = 0
         
         if use_mock:
-            self.setup_mock_sources(sources)
+            self.rescan_mock_sources()
         else:
             self.caps = [cv2.VideoCapture(src) for src in sources]
             
         self.num_sources = len(self.caps) if not use_mock else len(self.mock_files)
         logger.info(f"Initialized MultiCapture with {self.num_sources} sources (Mock: {use_mock}).")
 
-    def setup_mock_sources(self, sources):
-        for src in sources:
+    def rescan_mock_sources(self):
+        """Discovers mock files. Called on init and periodically in the loop."""
+        new_mock_files = []
+        for src in self.sources:
             src_str = str(src)
             if os.path.isdir(src_str):
                 files = []
                 for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG', '*.mp4', '*.avi']:
                     found = glob.glob(os.path.join(src_str, ext))
                     files.extend(found)
-                if not files:
-                    logger.warning(f"No mock files found in directory: {src_str}")
-                self.mock_files.append(files)
+                new_mock_files.append(sorted(files))
             else:
-                self.mock_files.append([src_str])
+                new_mock_files.append([src_str])
         
-        for file_list in self.mock_files:
-            if file_list and (file_list[0].endswith(('.mp4', '.avi'))):
-                self.caps.append(cv2.VideoCapture(file_list[0]))
-            else:
-                self.caps.append(None)
+        # Update caps for new videos if needed
+        if not self.caps:
+            for file_list in new_mock_files:
+                if file_list and (file_list[0].endswith(('.mp4', '.avi'))):
+                    self.caps.append(cv2.VideoCapture(file_list[0]))
+                else:
+                    self.caps.append(None)
+        
+        self.mock_files = new_mock_files
+        self.last_rescan = time.time()
 
     def get_all_frames(self):
+        # Periodically rescan mock directory (every 5 seconds)
+        if self.use_mock and (time.time() - self.last_rescan > 5):
+            self.rescan_mock_sources()
+
         frames = []
         source_count = len(self.mock_files) if self.use_mock else len(self.caps)
         for i in range(source_count):
@@ -129,17 +139,12 @@ class MultiCaptureService:
                 ret, frame = self.caps[index].read()
             return frame if ret else np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Pick a random file from the list (ensures we don't imread a directory)
+        # Pick a random file from the list
         img_path = random.choice(file_list)
-        if os.path.isdir(img_path):
-            logger.warning(f"Path {img_path} is a directory, skipping.")
-            return np.zeros((480, 640, 3), dtype=np.uint8)
+        if os.path.isdir(img_path): return np.zeros((480, 640, 3), dtype=np.uint8)
             
         frame = cv2.imread(img_path)
-        if frame is None:
-            logger.warning(f"Failed to load image: {img_path}")
-            return np.zeros((480, 640, 3), dtype=np.uint8)
-        return frame
+        return frame if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
 
     def release(self):
         for cap in self.caps:
@@ -197,21 +202,17 @@ def vision_loop():
             frames = cap.get_all_frames()
             
             all_detections = []
-            display_frame = None
+            raw_display_frames = []
             
             for i, frame in enumerate(frames):
                 if frame is None or frame.size == 0: continue
+                raw_display_frames.append(cv2.resize(frame, (640, 480)))
                 
                 cam_key = f"camera_{i}"
                 corners = config.get(cam_key, default_corners)
                 
                 try:
                     warped = pm.warp_frame(frame, corners)
-                    
-                    if i == 0:
-                        display_frame = warped.copy()
-                        gm.draw_grid(display_frame)
-                    
                     detections = detector.detect_pieces(warped, gm)
                     all_detections.append(detections)
                 except Exception as e:
@@ -220,10 +221,20 @@ def vision_loop():
             if all_detections:
                 fused_state = fusion.fuse(all_detections)
                 if fused_state:
-                    logger.info(f"Publishing board state: {len(fused_state)} pieces.")
                     publisher.publish(fused_state)
             
-            if display_frame is not None:
+            if raw_display_frames:
+                if len(raw_display_frames) == 1:
+                    display_frame = raw_display_frames[0]
+                elif len(raw_display_frames) == 2:
+                    display_frame = np.hstack(raw_display_frames)
+                else: # 4
+                    while len(raw_display_frames) < 4:
+                        raw_display_frames.append(np.zeros((480, 640, 3), dtype=np.uint8))
+                    top = np.hstack(raw_display_frames[:2])
+                    bottom = np.hstack(raw_display_frames[2:4])
+                    display_frame = np.vstack([top, bottom])
+                
                 with frame_lock:
                     current_frame = display_frame
 
@@ -237,5 +248,4 @@ def vision_loop():
 if __name__ == "__main__":
     t = threading.Thread(target=vision_loop, daemon=True)
     t.start()
-    logger.info("Starting MJPEG Stream Server on port 8001...")
     app.run(host='0.0.0.0', port=8001, debug=False, threaded=True)
