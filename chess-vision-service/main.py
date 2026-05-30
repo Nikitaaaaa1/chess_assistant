@@ -62,6 +62,21 @@ class RabbitMQPublisher:
             logger.error(f"Error publishing: {e}")
             self.channel = None
 
+class PerspectiveManager:
+    def __init__(self, target_size=800):
+        self.target_size = target_size
+        self.destination_points = np.float32([
+            [0, 0], [target_size, 0], [target_size, target_size], [0, target_size]
+        ])
+
+    def get_warp_matrix(self, corner_points):
+        src = np.float32(corner_points)
+        return cv2.getPerspectiveTransform(src, self.destination_points)
+
+    def warp_frame(self, frame, corner_points):
+        matrix = self.get_warp_matrix(corner_points)
+        return cv2.warpPerspective(frame, matrix, (self.target_size, self.target_size))
+
 class MultiCaptureService:
     def __init__(self, sources=[0], use_mock=False):
         self.use_mock = use_mock
@@ -86,7 +101,6 @@ class MultiCaptureService:
                 for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG', '*.mp4', '*.avi']:
                     found = glob.glob(os.path.join(src_str, ext))
                     files.extend(found)
-                # Filter out directories just in case
                 files = [f for f in files if os.path.isfile(f)]
                 new_mock_files.append(sorted(list(set(files))))
             else:
@@ -157,7 +171,6 @@ def video_feed():
         while True:
             with frame_lock:
                 if current_frame is None:
-                    # Return a "WAITING" frame instead of nothing
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
                     cv2.putText(frame, "WAITING FOR VISION...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                     (flag, encodedImage) = cv2.imencode(".jpg", frame)
@@ -182,7 +195,7 @@ def load_calibration(path="calibration_config.json"):
 def vision_loop():
     global current_frame
     use_mock = os.environ.get("USE_MOCK_DATA", "false").lower() == "true"
-    camera_env = os.environ.get("CAMERA_SOURCES", "/mock-data") # Default to /mock-data
+    camera_env = os.environ.get("CAMERA_SOURCES", "/mock-data")
     
     sources = [s.strip() for s in camera_env.split(",")]
     if not use_mock:
