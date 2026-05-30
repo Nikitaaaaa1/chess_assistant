@@ -5,3 +5,4 @@ pyyaml
 ultralytics
 onnxruntime
 pytest
+flask

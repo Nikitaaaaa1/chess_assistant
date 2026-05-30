@@ -4,8 +4,17 @@ services:
       context: ./chess-vision-service
       dockerfile: Dockerfile
     container_name: chess-vision-service
+    ports:
+      - "8001:8001"
     networks:
       - chess-net
+    environment:
+      - USE_MOCK_DATA=true
+      - CAMERA_SOURCES=../mock-data
+      - RABBITMQ_HOST=rabbitmq-broker
+    restart: always
+
+      - USE_MOCK_DATA=true
     restart: always
 
   chess-logic-api:

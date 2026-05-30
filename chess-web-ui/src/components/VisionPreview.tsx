@@ -11,27 +11,35 @@ export const VisionPreview = () => {
       </div>
 
       <div className="flex flex-col gap-4 flex-1">
-        {/* Camera A */}
-        <div className="relative group flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden min-h-[160px]">
+        {/* Processed Board Stream */}
+        <div className="relative group flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden min-h-[240px]">
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] font-bold text-slate-300 uppercase z-10">
-            CAM A: Board Warped
+            AVS: Warped & Detected
           </div>
+          
+          {/* Live MJPEG Stream from AVS */}
+          <img 
+            src="http://localhost:8001/stream" 
+            alt="Board Stream"
+            className="w-full h-full object-contain"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              if (e.currentTarget.nextSibling) {
+                (e.currentTarget.nextSibling as HTMLElement).style.display = 'flex';
+              }
+            }}
+            onLoad={(e) => {
+              e.currentTarget.style.display = 'block';
+              if (e.currentTarget.nextSibling) {
+                (e.currentTarget.nextSibling as HTMLElement).style.display = 'none';
+              }
+            }}
+          />
+          
           <div className="w-full h-full flex items-center justify-center text-slate-700 italic text-xs">
             No stream signal...
           </div>
-          <button className="absolute bottom-2 right-2 p-1.5 bg-black/40 hover:bg-black/80 rounded transition-colors opacity-0 group-hover:opacity-100">
-            <Maximize2 size={14} className="text-slate-400" />
-          </button>
-        </div>
-
-        {/* Camera B */}
-        <div className="relative group flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden min-h-[160px]">
-          <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] font-bold text-slate-300 uppercase z-10">
-            CAM B: Board Warped
-          </div>
-          <div className="w-full h-full flex items-center justify-center text-slate-700 italic text-xs">
-            No stream signal...
-          </div>
+          
           <button className="absolute bottom-2 right-2 p-1.5 bg-black/40 hover:bg-black/80 rounded transition-colors opacity-0 group-hover:opacity-100">
             <Maximize2 size={14} className="text-slate-400" />
           </button>
@@ -40,7 +48,7 @@ export const VisionPreview = () => {
       
       <div className="mt-2 text-center">
         <p className="text-[10px] font-mono text-slate-500">
-          DATA FUSION ACCURACY: <span className="text-emerald-500">N/A</span>
+          DATA FUSION ACCURACY: <span className="text-emerald-500">LIVE MOCK MODE</span>
         </p>
       </div>
     </div>
