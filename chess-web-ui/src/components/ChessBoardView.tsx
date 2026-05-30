@@ -8,34 +8,26 @@ interface ChessBoardViewProps {
 }
 
 export const ChessBoardView = ({ fen, onMove }: ChessBoardViewProps) => {
-  const [game, setGame] = useState(new Chess(fen));
+  const [game, setGame] = useState(new Chess());
 
-  // Update local game state when external FEN prop changes
   useEffect(() => {
     try {
-      // Validate FEN - if invalid (e.g. no kings), we use an empty board but 
-      // safely manually set the pieces from the FEN string if possible.
-      // However, react-chessboard is very resilient to FEN if we don't use the 'game' object's logic.
-      
-      const testGame = new Chess();
-      const validation = testGame.load(fen);
-      
-      if (validation) {
-        setGame(new Chess(fen));
-      } else {
-        // If FEN is technically invalid for chess.js (e.g. missing kings),
-        // we still want to SHOW the pieces. 
-        // We'll use a hack: set position directly to the FEN string on the component
-        // but keep the internal 'game' object at its last valid state or default.
-        console.warn("Rendering partial board state (invalid for logic, valid for display):", fen);
+      const newGame = new Chess();
+      // Try to load the FEN. If it's partial (no kings), chess.js might fail.
+      // But we still want to keep the 'game' object for move validation if possible.
+      try {
+        newGame.load(fen);
+        setGame(newGame);
+      } catch (e) {
+        // Partial FEN handling: if chess.js fails, we just don't update the logic object
+        // but react-chessboard will still try to render the pieces from the string.
       }
     } catch (e) {
-      console.error("Critical FEN error:", e);
+      console.error("Board Logic Error:", e);
     }
   }, [fen]);
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    // Moves are only allowed if the board is valid
     try {
         const gameCopy = new Chess(game.fen());
         const move = gameCopy.move({
@@ -54,14 +46,18 @@ export const ChessBoardView = ({ fen, onMove }: ChessBoardViewProps) => {
   }
 
   return (
-    <div className="w-full max-w-[600px] aspect-square shadow-2xl shadow-emerald-900/20 border-4 border-slate-800 rounded-lg overflow-hidden relative">
-      <Chessboard 
-        position={fen} // Use external FEN directly for display (more resilient)
-        onPieceDrop={onDrop}
-        boardOrientation="white"
-        customDarkSquareStyle={{ backgroundColor: '#1e293b' }}
-        customLightSquareStyle={{ backgroundColor: '#334155' }}
-      />
+    <div className="w-full max-w-[600px] shadow-2xl shadow-emerald-900/20 border-4 border-slate-800 rounded-lg overflow-hidden relative bg-slate-900">
+      {/* Explicitly wrap in a container that ensures height for the board */}
+      <div className="w-full h-full">
+        <Chessboard 
+          position={fen} 
+          onPieceDrop={onDrop}
+          boardOrientation="white"
+          customDarkSquareStyle={{ backgroundColor: '#1e293b' }}
+          customLightSquareStyle={{ backgroundColor: '#334155' }}
+          animationDuration={200}
+        />
+      </div>
     </div>
   );
 };
