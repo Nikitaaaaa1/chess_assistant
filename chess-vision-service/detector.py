@@ -14,16 +14,15 @@ class PieceDetector:
             self.model = YOLO(model_path)
             logger.info(f"YOLO model loaded: {model_path}")
         except Exception as e:
-            logger.warning(f"Failed to load YOLO model {model_path}: {e}. Simulation mode active.")
+            logger.warning(f"Failed to load YOLO model {model_path}: {e}")
             self.model = None
 
     def detect_pieces(self, warped_frame, grid_manager):
         """Returns a list of detections: [{'square': 'e4', 'piece': 'wP', 'conf': 0.9}]"""
         
-        if self.use_mock and self.model is None:
-            detections = self.generate_mock_detections()
-            logger.debug(f"Mock Detection: {len(detections)} pieces found.")
-            return detections
+        # If in mock mode, we prefer simulated detections to ensure the flow is visible
+        if self.use_mock:
+            return self.generate_mock_detections()
 
         if self.model is None:
             return []
@@ -46,20 +45,18 @@ class PieceDetector:
                     "conf": float(box.conf[0])
                 })
         
-        if detections:
-            logger.info(f"Inference complete: {len(detections)} pieces detected.")
         return detections
 
     def generate_mock_detections(self):
         """Generates static mock detections for testing the pipeline without a model."""
+        # Mix of pieces to prove sync is working
         return [
-            {"square": "e2", "piece": "wP", "conf": 0.95},
-            {"square": "e4", "piece": "wP", "conf": 0.88},
-            {"square": "e7", "piece": "bP", "conf": 0.92},
-            {"square": "e5", "piece": "bP", "conf": 0.85},
-            {"square": "g1", "piece": "wN", "conf": 0.99},
+            {"square": "e2", "piece": "wP", "conf": 0.99},
+            {"square": "e4", "piece": "wP", "conf": 0.99},
+            {"square": "d4", "piece": "wQ", "conf": 0.99},
             {"square": "e1", "piece": "wK", "conf": 0.99},
-            {"square": "e8", "piece": "bK", "conf": 0.99}
+            {"square": "e8", "piece": "bK", "conf": 0.99},
+            {"square": "c5", "piece": "bB", "conf": 0.99}
         ]
 
     def identify_square(self, x, y, grid_manager):
