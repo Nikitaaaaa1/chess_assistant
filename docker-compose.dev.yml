@@ -9,7 +9,7 @@ services:
     volumes:
       - ./chess-vision-service:/app
       - ./mock-data:/mock-data
-      - /app/venv # Don't overwrite container venv with local one
+      - /app/venv
     networks:
       - chess-net
     environment:
@@ -17,9 +17,9 @@ services:
       - CAMERA_SOURCES=/mock-data
       - RABBITMQ_HOST=rabbitmq-broker
       - PYTHONUNBUFFERED=1
-    # Note: main.py uses Flask/Thread which doesn't auto-reload by default 
-    # unless we use debug=True or a watcher. For Python, we'll use uvicorn 
-    # or simple re-run if needed, but for now we mount the code.
+    depends_on:
+      rabbitmq-broker:
+        condition: service_healthy
     restart: always
 
   chess-logic-api:
@@ -36,8 +36,10 @@ services:
     environment:
       - RABBITMQ_HOST=rabbitmq-broker
       - PYTHONUNBUFFERED=1
-    # Use uvicorn with --reload for hot-reloading
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      rabbitmq-broker:
+        condition: service_healthy
     restart: always
 
   chess-web-ui:
@@ -49,11 +51,11 @@ services:
       - "3000:5173"
     volumes:
       - ./chess-web-ui:/app
-      - /app/node_modules # Don't overwrite container modules
+      - /app/node_modules
     networks:
       - chess-net
     environment:
-      - CHOKIDAR_USEPOLLING=true # Helps with hot-reload detection in Docker
+      - CHOKIDAR_USEPOLLING=true
     restart: always
 
   rabbitmq-broker:
@@ -64,6 +66,11 @@ services:
       - "15672:15672"
     networks:
       - chess-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
     restart: always
 
 networks:

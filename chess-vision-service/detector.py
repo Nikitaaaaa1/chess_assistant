@@ -57,7 +57,9 @@ class PieceDetector:
             {"square": "e4", "piece": "wP", "conf": 0.88},
             {"square": "e7", "piece": "bP", "conf": 0.92},
             {"square": "e5", "piece": "bP", "conf": 0.85},
-            {"square": "g1", "piece": "wN", "conf": 0.99}
+            {"square": "g1", "piece": "wN", "conf": 0.99},
+            {"square": "e1", "piece": "wK", "conf": 0.99},
+            {"square": "e8", "piece": "bK", "conf": 0.99}
         ]
 
     def identify_square(self, x, y, grid_manager):
