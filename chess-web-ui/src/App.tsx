@@ -6,8 +6,9 @@ import { Cpu, Github } from 'lucide-react';
 
 // Simple logger mock
 const logger = {
-  info: (msg: string) => console.log(`[INFO] ${msg}`),
-  error: (msg: string) => console.error(`[ERROR] ${msg}`)
+  info: (msg: string) => console.log(`%c[INFO] ${msg}`, 'color: #10b981; font-weight: bold'),
+  error: (msg: string) => console.error(`%c[ERROR] ${msg}`, 'color: #ef4444; font-weight: bold'),
+  debug: (msg: string) => console.debug(`%c[DEBUG] ${msg}`, 'color: #3b82f6')
 };
 
 function App() {
@@ -20,13 +21,14 @@ function App() {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWS = () => {
-      logger.info("Attempting to connect to WebSocket: ws://localhost:8000/ws/game");
+      const wsUrl = 'ws://localhost:8000/ws/game';
+      logger.info(`Attempting connection to ${wsUrl}`);
       
       try {
-        const socket = new WebSocket('ws://localhost:8000/ws/game');
+        const socket = new WebSocket(wsUrl);
         
         socket.onopen = () => {
-          logger.info("WebSocket connected successfully");
+          logger.info("WebSocket: Connection established");
           setIsOnline(true);
           setApiStatus('ALL SERVICES OPERATIONAL');
         };
@@ -34,7 +36,9 @@ function App() {
         socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+            logger.debug(`WebSocket message received: ${data.type}`);
             if (data.type === 'GAME_STATE') {
+              logger.info(`Updating board state: ${data.fen}`);
               setFen(data.fen);
             }
           } catch (err) {
@@ -43,21 +47,19 @@ function App() {
         };
 
         socket.onclose = (event) => {
-          logger.info(`WebSocket closed: ${event.code} ${event.reason}`);
+          logger.info(`WebSocket: Connection closed (${event.code})`);
           setIsOnline(false);
           setApiStatus('SYSTEM OFFLINE');
-          // Reconnect logic
           reconnectTimeout = setTimeout(connectWS, 3000);
         };
 
         socket.onerror = (err) => {
-          logger.error("WebSocket encountered an error");
-          // socket.close() will be called automatically in most browsers, triggering onclose
+          logger.error("WebSocket: Error detected");
         };
 
         ws.current = socket;
       } catch (e) {
-        logger.error(`Connection attempt failed: ${e}`);
+        logger.error(`WebSocket: Setup failed: ${e}`);
         reconnectTimeout = setTimeout(connectWS, 5000);
       }
     };
@@ -67,7 +69,7 @@ function App() {
     return () => {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (ws.current) {
-        ws.current.onclose = null; // Prevent reconnect on intentional unmount
+        ws.current.onclose = null;
         ws.current.close();
       }
     };
@@ -109,7 +111,7 @@ function App() {
           <div className="w-full flex flex-col items-center">
             <ChessBoardView 
               fen={fen} 
-              onMove={(move) => console.log('Board Move:', move)} 
+              onMove={(move) => logger.info(`User attempted move: ${move}`)} 
             />
             <div className="mt-6 w-full flex justify-between px-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
               <span>View: Standard (White)</span>

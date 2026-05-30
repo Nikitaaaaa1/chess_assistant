@@ -13,7 +13,10 @@ from grid import GridManager
 from detector import PieceDetector
 from fusion import FusionManager
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger("AVS")
 
 app = Flask(__name__)
@@ -30,7 +33,7 @@ class RabbitMQPublisher:
 
     def connect(self):
         try:
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
+            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, heartbeat=600))
             self.channel = self.connection.channel()
             self.channel.queue_declare(queue=self.queue)
             logger.info(f"Connected to RabbitMQ at {self.host}")
@@ -38,7 +41,7 @@ class RabbitMQPublisher:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
 
     def publish(self, state):
-        if not self.channel:
+        if not self.channel or self.connection.is_closed:
             self.connect()
         if self.channel:
             try:
@@ -49,7 +52,7 @@ class RabbitMQPublisher:
                 )
             except Exception as e:
                 logger.error(f"Error publishing to RabbitMQ: {e}")
-                self.channel = None # Trigger reconnect
+                self.channel = None
 
 class PerspectiveManager:
     def __init__(self, target_size=800):
@@ -83,23 +86,28 @@ class MultiCaptureService:
 
     def setup_mock_sources(self, sources):
         for src in sources:
-            if os.path.isdir(str(src)):
+            src_str = str(src)
+            if os.path.isdir(src_str):
                 files = []
-                for ext in ['*.jpg', '*.jpeg', '*.png', '*.mp4', '*.avi']:
-                    files.extend(glob.glob(os.path.join(src, ext)))
+                for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG', '*.mp4', '*.avi']:
+                    found = glob.glob(os.path.join(src_str, ext))
+                    files.extend(found)
+                if not files:
+                    logger.warning(f"No mock files found in directory: {src_str}")
                 self.mock_files.append(files)
             else:
-                self.mock_files.append([src])
+                self.mock_files.append([src_str])
         
         for file_list in self.mock_files:
-            if file_list and (file_list[0].endswith('.mp4') or file_list[0].endswith('.avi')):
+            if file_list and (file_list[0].endswith(('.mp4', '.avi'))):
                 self.caps.append(cv2.VideoCapture(file_list[0]))
             else:
                 self.caps.append(None)
 
     def get_all_frames(self):
         frames = []
-        for i in range(len(self.mock_files) if self.use_mock else len(self.caps)):
+        source_count = len(self.mock_files) if self.use_mock else len(self.caps)
+        for i in range(source_count):
             if self.use_mock:
                 frame = self.get_mock_frame(i)
             else:
@@ -113,14 +121,25 @@ class MultiCaptureService:
         file_list = self.mock_files[index]
         if not file_list:
             return np.zeros((480, 640, 3), dtype=np.uint8)
+        
         if self.caps[index] is not None:
             ret, frame = self.caps[index].read()
             if not ret:
                 self.caps[index].set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = self.caps[index].read()
             return frame if ret else np.zeros((480, 640, 3), dtype=np.uint8)
+        
+        # Pick a random file from the list (ensures we don't imread a directory)
         img_path = random.choice(file_list)
-        return cv2.imread(img_path)
+        if os.path.isdir(img_path):
+            logger.warning(f"Path {img_path} is a directory, skipping.")
+            return np.zeros((480, 640, 3), dtype=np.uint8)
+            
+        frame = cv2.imread(img_path)
+        if frame is None:
+            logger.warning(f"Failed to load image: {img_path}")
+            return np.zeros((480, 640, 3), dtype=np.uint8)
+        return frame
 
     def release(self):
         for cap in self.caps:
@@ -133,9 +152,11 @@ def video_feed():
         while True:
             with frame_lock:
                 if current_frame is None:
+                    time.sleep(0.1)
                     continue
                 (flag, encodedImage) = cv2.imencode(".jpg", current_frame)
                 if not flag:
+                    time.sleep(0.1)
                     continue
             yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
             time.sleep(0.1)
@@ -143,22 +164,24 @@ def video_feed():
 
 def load_calibration(path="calibration_config.json"):
     if os.path.exists(path):
-        with open(path, 'r') as f: return json.load(f)
+        try:
+            with open(path, 'r') as f: return json.load(f)
+        except: return {}
     return {}
 
 def vision_loop():
     global current_frame
     use_mock = os.environ.get("USE_MOCK_DATA", "false").lower() == "true"
     camera_env = os.environ.get("CAMERA_SOURCES", "0,1")
-    sources = [s.strip() for s in camera_env.split(",")]
-    if not use_mock:
-        sources = [int(s) if s.isdigit() else s for s in sources]
+    
+    if use_mock and "CAMERA_SOURCES" not in os.environ:
+        sources = ["../mock-data"]
     else:
-        # Default mock folder if relative to project root
-        if "CAMERA_SOURCES" not in os.environ:
-            sources = ["../mock-data"]
+        sources = [s.strip() for s in camera_env.split(",")]
+        if not use_mock:
+            sources = [int(s) if s.isdigit() else s for s in sources]
 
-    logger.info(f"Vision loop starting (Mock: {use_mock})")
+    logger.info(f"Vision loop starting. Sources: {sources}, Mock: {use_mock}")
     cap = MultiCaptureService(sources=sources, use_mock=use_mock)
     pm = PerspectiveManager(target_size=800)
     gm = GridManager(board_size=800)
@@ -166,7 +189,7 @@ def vision_loop():
     fusion = FusionManager()
     publisher = RabbitMQPublisher(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq-broker'))
     
-    default_corners = [(120, 40), (520, 40), (520, 440), (120, 440)]
+    default_corners = [[100, 100], [700, 100], [700, 700], [100, 700]]
     
     try:
         while True:
@@ -178,36 +201,41 @@ def vision_loop():
             
             for i, frame in enumerate(frames):
                 if frame is None or frame.size == 0: continue
+                
                 cam_key = f"camera_{i}"
                 corners = config.get(cam_key, default_corners)
-                warped = pm.warp_frame(frame, corners)
                 
-                # Show grid on the first camera for the stream
-                if i == 0:
-                    display_frame = warped.copy()
-                    gm.draw_grid(display_frame)
-                
-                detections = detector.detect_pieces(warped, gm)
-                all_detections.append(detections)
+                try:
+                    warped = pm.warp_frame(frame, corners)
+                    
+                    if i == 0:
+                        display_frame = warped.copy()
+                        gm.draw_grid(display_frame)
+                    
+                    detections = detector.detect_pieces(warped, gm)
+                    all_detections.append(detections)
+                except Exception as e:
+                    logger.error(f"Error processing source {i}: {e}")
             
             if all_detections:
                 fused_state = fusion.fuse(all_detections)
-                publisher.publish(fused_state)
+                if fused_state:
+                    logger.info(f"Publishing board state: {len(fused_state)} pieces.")
+                    publisher.publish(fused_state)
             
             if display_frame is not None:
                 with frame_lock:
                     current_frame = display_frame
 
-            time.sleep(0.2) # Throttled for mock data polling
+            time.sleep(0.5 if use_mock else 0.05)
             
-    except KeyboardInterrupt:
-        logger.info("Vision loop stopping...")
+    except Exception as e:
+        logger.error(f"Fatal error in vision loop: {e}")
     finally:
         cap.release()
 
 if __name__ == "__main__":
-    # Start vision loop in a thread
     t = threading.Thread(target=vision_loop, daemon=True)
     t.start()
-    # Start Flask server
+    logger.info("Starting MJPEG Stream Server on port 8001...")
     app.run(host='0.0.0.0', port=8001, debug=False, threaded=True)

@@ -14,9 +14,6 @@ services:
       - RABBITMQ_HOST=rabbitmq-broker
     restart: always
 
-      - USE_MOCK_DATA=true
-    restart: always
-
   chess-logic-api:
     build:
       context: ./chess-logic-api
