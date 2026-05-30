@@ -19,6 +19,12 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 ### 2. Status Lifecycle
 - **Pending / In-Progress / In Review / Completed**
 
+### 3. Contextual Branching & Task Order
+- If a user request addresses a task out of the current roadmap sequence or is unrelated to the active focus, the agent **MUST** propose creating a new branch.
+- Branch names **MUST** follow [Conventional Branch](https://conventional-branch.github.io/) standards: `<type>/<description>`.
+- Example: `feat/add-stockfish-integration`, `fix/capture-buffer-overflow`.
+- Refer to `docs/skills/contextual-branching.md` for full guidelines.
+
 ---
 
 ## Progress Log
