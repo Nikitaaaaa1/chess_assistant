@@ -37,7 +37,11 @@ No task shall be marked **Completed** in `task-master` or this file until work i
 - **Work Done**: Implemented `PieceDetector` (YOLOv8) and `FusionManager` (multi-camera merger); integrated into AVS core loop. Added support for 1, 2, and 4 camera configurations.
 - **Verification Method**: Automated unit tests for fusion logic (3/3 passed); modular logic review for multi-camera scalability.
 - **Status**: Verified
-- **BLOCKERS**: None
+
+### 12 - 2026-05-30
+- **Work Done**: Implemented Mock Capture Mode in AVS, supporting looped videos and image folders for offline development.
+- **Verification Method**: Automated unit tests for video looping and directory ingestion (`test_mock_capture.py`).
+- **Status**: Verified
 
 ### 9 - 2026-03-22
 - **Work Done**: Scaffolded Vite/React frontend; implemented `ChessBoardView`, `ControlPanel`, and `VisionPreview` components with TailwindCSS styling. Established a modern "Control Center" dashboard layout.

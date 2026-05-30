@@ -18,6 +18,8 @@ System opiera się na architekturze mikrousług konteneryzowanych za pomocą Doc
 *   **Fuzja danych (Multi-Camera Fusion)**: Autorski algorytm łączący wyniki z wielu kamer w celu eliminacji martwych pól i przesłonięć (occlusions).
 *   **Kalibracja Interaktywna**: Narzędzie `calibrate.py` pozwalające na mapowanie narożników fizycznej deski do idealnego kwadratu 2D.
 *   **Integracja YOLO**: Moduł detekcji figur gotowy do współpracy z modelem YOLOv8.
+*   **Tryb Symulacji (Mock Capture)**: Możliwość użycia statycznych obrazów lub zapętlonych filmów wideo zamiast realnych kamer (sterowane przez `USE_MOCK_DATA`).
+
 
 ### 2. Logika i API (GLAS)
 *   **Komunikacja Real-Time**: Serwer WebSockets przesyłający stan szachownicy do frontendu natychmiast po wykryciu zmiany.

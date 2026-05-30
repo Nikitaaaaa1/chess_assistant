@@ -255,6 +255,20 @@
         ],
         "status": "in-progress",
         "subtasks": []
+      },
+      {
+        "id": "12",
+        "title": "AVS - Mock Capture Mode (Images/Videos)",
+        "description": "Implement a simulation mode for AVS that uses static images or looped videos instead of live camera feeds.",
+        "status": "done",
+        "priority": "low",
+        "dependencies": [
+          "2"
+        ],
+        "details": "Update MultiCaptureService to detect directory or file paths in CAMERA_SOURCES. Implement video looping logic and random image selection from folders. Add USE_MOCK_DATA environment variable to toggle this mode.",
+        "testStrategy": "Run AVS with USE_MOCK_DATA=true and a folder of images. Verify logs show frame processing. Run with a video file and verify it loops after completion.",
+        "subtasks": [],
+        "updatedAt": "2026-05-30T19:25:00.000Z"
       }
     ],
     "metadata": {
