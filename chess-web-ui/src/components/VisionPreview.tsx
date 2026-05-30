@@ -11,16 +11,16 @@ export const VisionPreview = () => {
       </div>
 
       <div className="flex flex-col gap-4 flex-1">
-        {/* Processed Board Stream */}
+        {/* RAW Source Stream */}
         <div className="relative group flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden min-h-[240px]">
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 rounded text-[10px] font-bold text-slate-300 uppercase z-10">
-            AVS: Warped & Detected
+            AVS: Source Input (Raw)
           </div>
           
           {/* Live MJPEG Stream from AVS */}
           <img 
             src="http://localhost:8001/stream" 
-            alt="Board Stream"
+            alt="Source Stream"
             className="w-full h-full object-contain"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
@@ -48,7 +48,7 @@ export const VisionPreview = () => {
       
       <div className="mt-2 text-center">
         <p className="text-[10px] font-mono text-slate-500">
-          DATA FUSION ACCURACY: <span className="text-emerald-500">LIVE MOCK MODE</span>
+          FEED STATUS: <span className="text-emerald-500 font-bold uppercase">Streaming Live</span>
         </p>
       </div>
     </div>
