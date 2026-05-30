@@ -47,5 +47,13 @@ class TestFusionManager(unittest.TestCase):
         fused = self.fm.fuse(detections)
         self.assertEqual(fused['e2'], 'wP')
 
+    def test_empty_detections(self):
+        """Verify fusion handles empty lists safely."""
+        fused = self.fm.fuse([])
+        self.assertEqual(fused, {})
+        
+        fused = self.fm.fuse([[], []])
+        self.assertEqual(fused, {})
+
 if __name__ == "__main__":
     unittest.main()

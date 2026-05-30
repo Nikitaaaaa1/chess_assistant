@@ -10,14 +10,15 @@ from main import MultiCaptureService
 
 class TestMockCaptureMode(unittest.TestCase):
     
+    @patch('os.path.isfile')
     @patch('os.path.isdir')
     @patch('glob.glob')
-    def test_init_mock_directory(self, mock_glob, mock_isdir):
+    def test_init_mock_directory(self, mock_glob, mock_isdir, mock_isfile):
         """Verify that a directory source is correctly expanded in mock mode."""
         mock_isdir.return_value = True
-        # glob.glob is called 5 times (for each extension)
-        # We'll make it return 1 item for the first call and [] for others to keep it simple
-        mock_glob.side_effect = [['mock1.jpg'], [], [], [], []]
+        mock_isfile.return_value = True
+        # glob.glob is called for each extension
+        mock_glob.side_effect = [['mock1.jpg'], [], [], [], [], [], [], []]
         
         service = MultiCaptureService(sources=['mock_dir'], use_mock=True)
         
@@ -28,17 +29,18 @@ class TestMockCaptureMode(unittest.TestCase):
     @patch('cv2.imread')
     def test_get_mock_frame_image(self, mock_imread):
         """Verify picking a random image from the mock list."""
-        mock_imread.return_value = np.ones((480, 640, 3), dtype=np.uint8)
+        mock_imread.return_value = np.ones((100, 100, 3), dtype=np.uint8)
         
         # Manually setup the service state
         service = MultiCaptureService(sources=[], use_mock=True)
         service.mock_files = [['fake_img.jpg']]
         service.caps = [None]
+        service.current_mock_idx = [0]
         
         frames = service.get_all_frames()
         
         self.assertEqual(len(frames), 1)
-        self.assertEqual(frames[0].shape, (480, 640, 3))
+        self.assertEqual(frames[0].shape, (720, 1280, 3)) # Resized
         mock_imread.assert_called_with('fake_img.jpg')
 
     @patch('cv2.VideoCapture')
@@ -51,7 +53,8 @@ class TestMockCaptureMode(unittest.TestCase):
         
         # Setup for video
         with patch('os.path.isdir', return_value=False):
-            service = MultiCaptureService(sources=['test.mp4'], use_mock=True)
+            with patch('os.path.isfile', return_value=True):
+                service = MultiCaptureService(sources=['test.mp4'], use_mock=True)
         
         # Frame 1: Success
         f1 = service.get_all_frames()[0]
@@ -61,8 +64,6 @@ class TestMockCaptureMode(unittest.TestCase):
         f2 = service.get_all_frames()[0]
         self.assertTrue(f2 is not None)
         
-        # Verify set was called with 0 (index 0 might be CAP_PROP_POS_MSEC, but we use the constant)
-        # We check the call regardless of the integer value of the constant
         import cv2
         mock_cap.set.assert_called_with(cv2.CAP_PROP_POS_FRAMES, 0)
 
